@@ -10,7 +10,7 @@ Working name. A portfolio project built by Christen and Dad, not a business.
 
 ## Status
 
-M0, foundation. Docs written. The pnpm workspace, tooling and `packages/core/src/types.ts` are in, and `pnpm lint`, `pnpm typecheck` and `pnpm test` pass. No feature code yet. A single-file prototype of the estimator exists as the "Rajdhani Live Tracker" artifact and will be ported into `packages/core`.
+M0, foundation. Docs written. The pnpm workspace, tooling and `packages/core/src/types.ts` are in, and `pnpm lint`, `pnpm typecheck` and `pnpm test` pass. No feature code yet. A single-file prototype of the estimator is published at [indian-railway-tracker.vercel.app](https://indian-railway-tracker.vercel.app), served from `site/` and running on a simulated feed. Its estimator is the earlier model, pace straight from the timetable, and will be replaced rather than copied when `packages/core/src/estimate.ts` lands. Its 8-stop timetable for 12951, with per-stop km checked against etrain.info and ixigo on 17 Oct 2026, is the seed for `packages/refdata`.
 
 ## Docs
 
