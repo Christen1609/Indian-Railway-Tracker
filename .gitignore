@@ -1,0 +1,16 @@
+# Crash artefacts
+*.stackdump
+
+# Local archive of the docs, already unpacked into train-tracker/
+train-tracker-docs.zip
+
+# Secrets. .env.example is committed, .env is not.
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+.turbo/
+*.log
