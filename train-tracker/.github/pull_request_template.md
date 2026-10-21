@@ -10,8 +10,15 @@
 
 <!-- Tests added or changed. Fixtures used. Anything checked by hand. -->
 
+## New functions and files
+
+<!-- List each one with the checklist step from CODING_STANDARDS.md that allowed it.
+     Write "None" if this PR only extends existing functions and files. -->
+
 ## Checklist
 
+- [ ] Reuse checklists were run. Every new function and file is listed above with its step
+- [ ] Comments are only the three allowed kinds
 - [ ] `pnpm lint`, `pnpm typecheck` and `pnpm test` pass
 - [ ] `packages/core` is still free of I/O, clock and randomness
 - [ ] New external data goes through a zod schema

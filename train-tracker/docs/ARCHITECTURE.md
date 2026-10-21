@@ -70,12 +70,11 @@ train-tracker/
 ├── packages/
 │   ├── core/              Pure domain logic. No network, no DB, no clock, no randomness.
 │   │   └── src/
-│   │       ├── types.ts
+│   │       ├── types.ts   Types, and assert() for invariant checks.
 │   │       ├── time.ts    The only place that does time zone and journey date math.
-│   │       ├── assert.ts  Invariant checks for programmer mistakes.
-│   │       ├── sources/   <source>.parse.ts and <source>.schema.ts, one pair per source.
+│   │       ├── sources/   One file per source, holding its zod schema and its parser.
 │   │       ├── fusion/    normalize.ts, filter.ts, resolve.ts, trust.ts
-│   │       ├── pace/      pace.ts, caps.ts, window.ts, position.ts, late.ts
+│   │       ├── estimate.ts  Pace, caps, windows, position, late.
 │   │       ├── schedule/  next-check.ts. When the next check is due. Pure, used by the scheduler.
 │   │       └── accuracy/  score.ts. Compares logged estimates and windows with the truth.
 │   └── refdata/           Scripts that build stations, timetables and geometry.
