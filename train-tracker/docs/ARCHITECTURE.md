@@ -410,6 +410,7 @@ Most bugs in this project will be time bugs.
 | Question | Options | Lean |
 |----------|---------|------|
 | Where does the ingest worker run, for free? | A free Node host vs Supabase Edge Function with pg_cron | Check free tiers at M1. Must not need a card. |
+| How does the frontend lane build before M1 ingest exists? | Wait for M1, vs a dev-only typed `TrainState` stub in `apps/web` that no production build imports | The stub. Hard rule 2 exists so a demo can never be faked, not so a component cannot be developed. Needs a call before two frontend agents start. |
 | Window weights and buffer | 0.6/0.4, 5 min or 5% | Starting values. Tune from journey scores. |
 
 When an open question is decided, move it to Decided with one line of why. Do not delete history.
