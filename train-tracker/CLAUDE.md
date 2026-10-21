@@ -13,6 +13,24 @@ A live tracker for Indian trains. It merges several free, unofficial feeds into 
 - `docs/DATA_SOURCES.md` before touching adapters, the scheduler, parsers or merging.
 - `docs/CODING_STANDARDS.md` for how code is written.
 - `docs/GLOSSARY.md` for the words to use.
+- `docs/AGENTS.md` if you are one of several agents on this repo, for roles and handoffs.
+
+## Lanes
+
+Several agents work here at once. Stay in your lane.
+
+| Path | Owner |
+|------|-------|
+| `apps/ingest/**`, `supabase/**` | backend builder |
+| `apps/web/**` | frontend builder |
+| `packages/core/**` | backend lane writes. The frontend lane imports, never edits |
+| `packages/refdata/**` | backend lane |
+| `docs/**`, `CLAUDE.md`, `README.md` | deciders only. Builders propose in the PR |
+| `package.json`, `pnpm-lock.yaml`, `supabase/migrations/**` | one agent at a time, announced in the PR |
+
+If your task needs a file outside your lane, stop and say so in your summary. Do not edit it.
+
+Two agents adding dependencies at once produce lockfile conflicts, and two agents numbering a migration `003_` collide. That is why the last row exists.
 
 ## Hard rules
 

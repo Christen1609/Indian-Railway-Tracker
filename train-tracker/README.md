@@ -10,7 +10,7 @@ Working name. A portfolio project built by Christen and Dad, not a business.
 
 ## Status
 
-M0, foundation. Docs written, no code yet. A single-file prototype of the estimator exists as the "Rajdhani Live Tracker" artifact and will be ported into `packages/core`.
+M0, foundation. Docs written. The pnpm workspace, tooling and `packages/core/src/types.ts` are in, and `pnpm lint`, `pnpm typecheck` and `pnpm test` pass. No feature code yet. A single-file prototype of the estimator exists as the "Rajdhani Live Tracker" artifact and will be ported into `packages/core`.
 
 ## Docs
 
@@ -20,6 +20,7 @@ M0, foundation. Docs written, no code yet. A single-file prototype of the estima
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | You are about to write code and need the layout, data model or estimator. |
 | [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) | You are touching sources, keys, quotas, parsers or the resolver. |
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Always. Before your first PR. |
+| [docs/AGENTS.md](docs/AGENTS.md) | Several AI agents are working on this repo and you need the roles and lanes. |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | A word is unclear, or you are naming something. |
 | [CLAUDE.md](CLAUDE.md) | You are an AI agent, or you are prompting one. |
 
