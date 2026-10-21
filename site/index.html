@@ -3,100 +3,770 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Indian Railway Tracker</title>
+    <title>Indian Railway Tracker · 12951 Mumbai Rajdhani</title>
     <meta
       name="description"
-      content="Tracking trains across the Indian Railway network using data from public APIs. A passion project."
+      content="Where is an Indian train right now, and how sure are we? A prototype that estimates position and arrival windows for 12951, the Mumbai Rajdhani, from station events and the real timetable."
     />
-    <style>
-      :root {
-        color-scheme: dark light;
-        --ink: #f4f4f5;
-        --muted: #a1a1aa;
-        --ground: #0a0a0b;
-        --rule: #27272a;
-      }
-      @media (prefers-color-scheme: light) {
-        :root {
-          --ink: #18181b;
-          --muted: #52525b;
-          --ground: #fafafa;
-          --rule: #e4e4e7;
-        }
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        min-height: 100dvh;
-        display: grid;
-        place-items: center;
-        padding: calc(24px + env(safe-area-inset-top, 0px)) 20px
-          calc(24px + env(safe-area-inset-bottom, 0px));
-        background: var(--ground);
-        color: var(--ink);
-        font: 400 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        -webkit-font-smoothing: antialiased;
-      }
-      main {
-        width: 100%;
-        max-width: 34rem;
-      }
-      .eyebrow {
-        margin: 0 0 1.5rem;
-        font-size: 0.75rem;
-        font-weight: 500;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-      h1 {
-        margin: 0 0 1.25rem;
-        font-size: clamp(2rem, 7vw, 3.25rem);
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        line-height: 1.1;
-      }
-      p {
-        margin: 0 0 1rem;
-        max-width: 30rem;
-      }
-      p.lede {
-        font-size: clamp(1rem, 2.4vw, 1.125rem);
-      }
-      p.note {
-        color: var(--muted);
-      }
-      footer {
-        margin-top: 2.5rem;
-        padding-top: 1.25rem;
-        border-top: 1px solid var(--rule);
-        font-size: 0.875rem;
-        color: var(--muted);
-      }
-      a {
-        color: inherit;
-        text-decoration-color: var(--rule);
-        text-underline-offset: 3px;
-      }
-      a:hover {
-        text-decoration-color: currentColor;
-      }
-    </style>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12.5' fill='%23F4C20D' stroke='%23121212' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%232160C4'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500&display=swap"
+    />
+<style>
+/* Layout: a section controller's desk. Route map and live status side by side, the time-distance chart below, raw feed and method last. */
+:root{
+  --bg:#EDF1F4; --panel:#FFFFFF; --ink:#14212C; --muted:#5B6C7A; --rule:#D2DBE2;
+  --board:#F4C20D; --board-ink:#121212;
+  --est:#2160C4; --est-soft:rgba(33,96,196,.16);
+  --ok:#1C8548; --warn:#A96400; --late:#C0352B;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --f-hi:"Noto Sans Devanagari","Nirmala UI",Mangal,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C1319; --panel:#131D26; --ink:#E3EBF1; --muted:#8D9EAC; --rule:#23313C;
+    --est:#71A5FF; --est-soft:rgba(113,165,255,.22);
+    --ok:#4BC287; --warn:#E3A13B; --late:#F1675C; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C1319; --panel:#131D26; --ink:#E3EBF1; --muted:#8D9EAC; --rule:#23313C;
+  --est:#71A5FF; --est-soft:rgba(113,165,255,.22);
+  --ok:#4BC287; --warn:#E3A13B; --late:#F1675C; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+img{max-width:100%}
+[hidden]{display:none!important}
+.wrap{max-width:1200px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:calc(20px + env(safe-area-inset-top,0px));padding-bottom:calc(40px + env(safe-area-inset-bottom,0px));display:grid;gap:18px}
+h1,h2,h3{margin:0;text-wrap:balance}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* header */
+.hdr{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 28px}
+.eyebrow{flex:1 0 100%;margin:0;font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.title{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.no{font-family:var(--f-display);font-weight:700;font-size:64px;line-height:.82;letter-spacing:-.01em}
+.nm{display:grid;gap:2px;padding-bottom:4px}
+.nm h1{font-family:var(--f-display);font-weight:600;font-size:30px;line-height:1}
+.nm .hi{font-family:var(--f-hi);font-size:14px;color:var(--muted);line-height:1.2}
+.route{font-family:var(--f-mono);font-size:13px;color:var(--muted);padding-bottom:6px}
+.route b{color:var(--ink);font-weight:500}
+.note{margin:0;font-size:14px;color:var(--muted);max-width:72ch}
+.note strong{color:var(--ink)}
+
+/* station board chip */
+.code{display:inline-block;font-family:var(--f-display);font-weight:700;font-size:14px;letter-spacing:.05em;line-height:1;padding:3px 6px 2px;background:var(--board);color:var(--board-ink);border:1.5px solid var(--board-ink);border-radius:2px;white-space:nowrap}
+
+/* controls */
+.ctl{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px 20px;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:12px 16px}
+.clock{display:flex;align-items:baseline;gap:10px}
+.clock .t{font-family:var(--f-mono);font-weight:500;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.clock .d{font-size:13px;color:var(--muted);line-height:1.25}
+.sim{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--est);border:1px solid currentColor;border-radius:3px;padding:1px 6px;white-space:nowrap}
+.btns{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{appearance:none;background:transparent;color:var(--ink);border:1px solid var(--rule);border-radius:4px;font-family:var(--f-display);font-weight:600;font-size:16px;line-height:1;padding:7px 11px;cursor:pointer;font-variant-numeric:tabular-nums}
+.btn:hover{border-color:var(--muted)}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.play{min-width:76px}
+.btn:focus-visible,input:focus-visible{outline:2px solid var(--est);outline-offset:2px}
+.speeds{display:inline-flex;gap:0}
+.speeds .btn{border-radius:0;margin-left:-1px}
+.speeds .btn:first-child{border-radius:4px 0 0 4px;margin-left:0}
+.speeds .btn:last-child{border-radius:0 4px 4px 0}
+.tog{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;white-space:nowrap}
+.tog input{width:17px;height:17px;accent-color:var(--est);margin:0}
+.scrub{grid-column:1/-1;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.scrub input{width:100%;accent-color:var(--est);margin:0}
+@media (max-width:760px){.ctl{grid-template-columns:minmax(0,1fr)}.btns{justify-content:flex-start}}
+
+/* main grid */
+.main{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:18px;align-items:start}
+.side{display:grid;gap:18px;min-width:0}
+@media (max-width:880px){.main{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:16px;min-width:0}
+.card>h2{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+
+/* map */
+.map svg{display:block;width:100%;height:auto;max-width:100%}
+.g-line{stroke:var(--rule);stroke-width:1}
+.g-lbl{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+.rail-a{fill:none;stroke:var(--ink);stroke-width:5;stroke-linejoin:round;stroke-linecap:round}
+.rail-b{fill:none;stroke:var(--panel);stroke-width:2.2;stroke-dasharray:7 7;stroke-linejoin:round}
+.stn{fill:var(--ink);stroke:var(--panel);stroke-width:1.5}
+.chip{fill:var(--board);stroke:var(--board-ink);stroke-width:1.3}
+.chip-t{fill:var(--board-ink);font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.04em}
+.stn-n{fill:var(--muted);font-family:var(--f-body);font-size:11.5px}
+.band{fill:none;stroke:var(--est-soft);stroke-width:16;stroke-linecap:round;stroke-linejoin:round}
+.pulse{fill:var(--est);opacity:.25;transform-box:fill-box;transform-origin:center;animation:pulse 1.8s ease-out infinite}
+@keyframes pulse{from{transform:scale(.6);opacity:.45}to{transform:scale(1.9);opacity:0}}
+.mk{fill:var(--board);stroke:var(--board-ink);stroke-width:2.2}
+.mk-dot{fill:var(--est)}
+.ghost{fill:none;stroke:var(--muted);stroke-width:1.8;stroke-dasharray:3 2.5}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:50%;display:inline-block}
+.sw.est{background:var(--board);border:2px solid var(--board-ink);box-shadow:inset 0 0 0 3px var(--board)}
+.sw.gh{border:1.8px dashed var(--muted)}
+.sw.bd{width:22px;height:9px;border-radius:5px;background:var(--est-soft)}
+.map .fine{font-size:12px;color:var(--muted);margin:8px 0 0}
+
+/* status */
+.status{display:grid;gap:14px}
+.st-top{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px 16px}
+.st-line{font-family:var(--f-display);font-weight:600;font-size:32px;line-height:1.02;max-width:20ch}
+.st-sub{font-size:14px;color:var(--muted);margin-top:4px}
+.pill{font-family:var(--f-display);font-weight:600;font-size:17px;line-height:1;padding:7px 11px;border-radius:999px;white-space:nowrap;border:1.5px solid currentColor}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.late{color:var(--late)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px 18px;margin:0;border-top:1px solid var(--rule);padding-top:12px}
+.facts div{min-width:0}
+.facts dt{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.facts dd{margin:2px 0 0;font-size:15px}
+.facts dd small{display:block;color:var(--muted);font-size:13px}
+.facts .err{color:var(--est)}
+
+/* stop list */
+.stops-head,.row{display:grid;grid-template-columns:28px minmax(0,1fr) 64px 64px 96px;grid-template-areas:"rail stn arr dep dly";gap:0 10px;align-items:center}
+.stops-head{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.stops-head span:nth-child(1){grid-area:rail}.stops-head span:nth-child(2){grid-area:stn}.stops-head span:nth-child(3){grid-area:arr}.stops-head span:nth-child(4){grid-area:dep}.stops-head span:nth-child(5){grid-area:dly;text-align:right}
+.stops{position:relative;list-style:none;margin:0;padding:0}
+.row{padding:11px 0;border-bottom:1px solid var(--rule)}
+.row:last-child{border-bottom:0}
+.c-rail{grid-area:rail;display:flex;justify-content:center}
+.dot{width:12px;height:12px;border-radius:2px;background:var(--panel);border:2px solid var(--muted);position:relative;z-index:1}
+.row.passed .dot{background:var(--ink);border-color:var(--ink)}
+.row.here .dot{background:var(--board);border-color:var(--board-ink)}
+.c-stn{grid-area:stn;min-width:0;display:grid;gap:3px}
+.c-stn .l1{display:flex;align-items:center;gap:8px;min-width:0}
+.c-stn .nmx{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-stn .hi{font-family:var(--f-hi);font-size:12.5px;color:var(--muted);line-height:1.2}
+.row.ahead .c-stn .nmx{font-weight:400}
+.c-arr{grid-area:arr}.c-dep{grid-area:dep}
+.tm{display:grid;line-height:1.25;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.tm .s{font-size:11.5px;color:var(--muted)}
+.tm .a{font-size:14px;font-weight:500}
+.tm .a.exp{color:var(--est);font-style:italic;font-weight:400}
+.tm .a.nr{font-family:var(--f-body);font-size:11.5px;color:var(--muted);font-weight:400}
+.c-dly{grid-area:dly;justify-self:end}
+.dly{font-family:var(--f-display);font-weight:600;font-size:14px;line-height:1;padding:4px 8px;border-radius:999px;white-space:nowrap;border:1.5px solid currentColor}
+.dly.ok{color:var(--ok)}.dly.warn{color:var(--warn)}.dly.late{color:var(--late)}
+.dly.exp{border-style:dashed}
+.rail-full,.rail-done{position:absolute;left:13px;width:2px;z-index:0}
+.rail-full{background:var(--rule)}
+.rail-done{background:var(--ink)}
+.trainmk{position:absolute;left:5px;top:0;width:18px;height:18px;border-radius:50%;background:var(--board);border:2.5px solid var(--board-ink);z-index:2;box-shadow:0 0 0 4px var(--est-soft)}
+@media (max-width:540px){
+  .stops-head{display:none}
+  .row{grid-template-columns:28px minmax(0,1fr) minmax(0,1fr) auto;grid-template-areas:"rail stn stn dly" "rail arr dep .";row-gap:6px}
+  .tm .s::before{content:attr(data-k) " "}
+}
+
+/* chart */
+.chart-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.chart-scroll svg{display:block;width:100%;min-width:660px;height:auto}
+.c-grid{stroke:var(--rule);stroke-width:1}
+.c-lbl{fill:var(--muted);font-family:var(--f-mono);font-size:11px}
+.c-code{fill:var(--ink);font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.04em}
+.c-sched{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4}
+.c-truth{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-dasharray:1.5 3;stroke-linecap:round}
+.c-conf{fill:none;stroke:var(--ink);stroke-width:2.4;stroke-linejoin:round}
+.c-evt{fill:var(--ink);stroke:var(--panel);stroke-width:1.5}
+.c-est{fill:none;stroke:var(--est);stroke-width:2.4;stroke-linejoin:round}
+.c-fut{fill:none;stroke:var(--est);stroke-width:2;stroke-dasharray:2 5;stroke-linecap:round}
+.c-band{fill:var(--est-soft)}
+.c-now{stroke:var(--est);stroke-width:1}
+.c-nowt{fill:var(--est);font-family:var(--f-mono);font-size:11px;font-weight:500}
+.c-mk{fill:var(--board);stroke:var(--board-ink);stroke-width:2}
+.chart-legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);margin-top:8px}
+.chart-legend span{display:inline-flex;align-items:center;gap:7px}
+.ln{width:24px;height:0;border-top:2px solid var(--ink);display:inline-block}
+.ln.sch{border-top:1.5px dashed var(--muted)}
+.ln.est{border-top-color:var(--est)}
+.ln.fut{border-top:2px dotted var(--est)}
+.ln.tru{border-top:2px dotted var(--muted)}
+.chart-intro{margin:0 0 10px;font-size:14px;color:var(--muted);max-width:80ch}
+
+/* bottom */
+.bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:880px){.bottom{grid-template-columns:minmax(0,1fr)}}
+pre{margin:0;background:var(--bg);border:1px solid var(--rule);border-radius:6px;padding:12px;font-family:var(--f-mono);font-size:12.5px;line-height:1.5;overflow-x:auto;color:var(--ink)}
+.feedlog{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:0}
+.feedlog li{display:grid;grid-template-columns:44px 52px minmax(0,1fr);gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule);font-size:13.5px}
+.feedlog li:last-child{border-bottom:0}
+.ev{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.06em;color:var(--muted)}
+.feedlog .when{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px}
+.feedlog .when b{color:var(--ink);font-weight:500}
+.pending{margin:10px 0 0;font-size:13px;color:var(--est)}
+.how ol{margin:0;padding-left:1.3em;display:grid;gap:8px;max-width:64ch}
+.how li::marker{font-family:var(--f-display);font-weight:700;color:var(--muted)}
+.how p{margin:12px 0 0;font-size:14px;color:var(--muted);max-width:64ch}
+.foot{font-size:12.5px;color:var(--muted);margin:0}
+.foot a{color:var(--muted)}
+
+@media (prefers-reduced-motion: reduce){.pulse{animation:none;opacity:.2}}
+</style>
   </head>
   <body>
-    <main>
-      <p class="eyebrow">Indian Railway Tracker</p>
-      <h1>Under Construction</h1>
-      <p class="lede">
-        Tracking trains across the Indian Railway network using data from public APIs.
-      </p>
-      <p class="note">A passion project.</p>
-      <footer>
-        Unofficial. Not affiliated with Indian Railways.
-        <a href="https://github.com/Christen1609/Indian-Railway-Tracker">Source on GitHub</a>.
-      </footer>
-    </main>
+<div class="wrap">
+  <header class="hdr">
+    <p class="eyebrow">Indian Railway Tracker · prototype</p>
+    <div class="title">
+      <div class="no">12951</div>
+      <div class="nm">
+        <h1>Mumbai Rajdhani</h1>
+        <div class="hi" lang="hi">मुंबई राजधानी</div>
+      </div>
+    </div>
+    <div class="route"><b>MMCT</b> Mumbai Central → <b>NDLS</b> New Delhi · 1,384 km · daily · 15 h 32 m</div>
+    <p class="note"><strong>Simulated feed on the real timetable.</strong> The live version needs an API key and a small server, because this page cannot call outside services. Everything below the feed (the estimate, the ETAs, the error band) is the same code either way.</p>
+  </header>
+
+  <section class="ctl" aria-label="Simulation controls">
+    <div class="clock">
+      <div class="t" id="clk">21:05</div>
+      <div class="d"><span id="clkd">Sat 17 Oct, Day 1</span><br>IST</div>
+      <span class="sim">Sim</span>
+    </div>
+    <div class="btns">
+      <button class="btn play" id="play" type="button" aria-label="Pause">Pause</button>
+      <div class="speeds" role="group" aria-label="Playback speed" id="speeds">
+        <button class="btn" type="button" data-s="1" aria-pressed="false">1×</button>
+        <button class="btn" type="button" data-s="60" aria-pressed="true">60×</button>
+        <button class="btn" type="button" data-s="300" aria-pressed="false">300×</button>
+        <button class="btn" type="button" data-s="1200" aria-pressed="false">1200×</button>
+      </div>
+    </div>
+    <label class="tog"><input type="checkbox" id="truth" checked> Show actual position</label>
+    <div class="scrub">
+      <span>16:30</span>
+      <input type="range" id="scrub" min="990" max="2010" step="1" value="1265" aria-label="Journey time">
+      <span>09:30 +1</span>
+    </div>
+  </section>
+
+  <div class="main">
+    <section class="card map" aria-label="Route map">
+      <h2>Route</h2>
+      <svg id="map" viewBox="0 0 400 640" role="img" aria-label="Map of the Mumbai to New Delhi route with the train's estimated position"></svg>
+      <div class="legend">
+        <span><i class="sw est"></i>Estimated</span>
+        <span><i class="sw bd"></i>Error band</span>
+        <span id="lg-ghost"><i class="sw gh"></i>Actual (sim only)</span>
+      </div>
+      <p class="fine">Station positions are approximate. Lines between stops are simplified.</p>
+    </section>
+
+    <div class="side">
+      <section class="card status" aria-live="polite" aria-label="Current status">
+        <div class="st-top">
+          <div>
+            <h2 class="st-line" id="st-line">Between Surat and Vadodara Jn</h2>
+            <div class="st-sub" id="st-sub"></div>
+          </div>
+          <span class="pill late" id="st-pill">13 min late</span>
+        </div>
+        <dl class="facts" id="facts"></dl>
+      </section>
+
+      <section class="card" aria-label="Stops">
+        <h2>Stops</h2>
+        <div class="stops-head"><span></span><span>Station</span><span>Arr</span><span>Dep</span><span>Delay</span></div>
+        <ol class="stops" id="stops"></ol>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" aria-label="Time-distance chart">
+    <h2>Time-distance chart</h2>
+    <p class="chart-intro">The chart railway control offices draw by hand: time across, distance up. A flat line is a halt. Steeper means faster.</p>
+    <div class="chart-scroll"><svg id="chart" viewBox="0 0 900 360" role="img" aria-label="Time against distance for the timetable, reported events and the estimate"></svg></div>
+    <div class="chart-legend">
+      <span><i class="ln sch"></i>Timetable</span>
+      <span><i class="ln"></i>Reported by feed</span>
+      <span><i class="ln est"></i>Estimate</span>
+      <span><i class="ln fut"></i>Projected</span>
+      <span id="lg-ctruth"><i class="ln tru"></i>Actual (sim only)</span>
+    </div>
+  </section>
+
+  <div class="bottom">
+    <section class="card" aria-label="Feed">
+      <h2>What the feed sends</h2>
+      <pre id="snap"></pre>
+      <ul class="feedlog" id="log"></ul>
+      <p class="pending" id="pending" hidden></p>
+    </section>
+    <section class="card how" aria-label="Method">
+      <h2>How the position is estimated</h2>
+      <ol>
+        <li>Take the newest event in the feed: the train arrived at or left a station, and when.</li>
+        <li>Move the train along that section at the timetable's pace since the event.</li>
+        <li>Never let it pass a station the feed hasn't confirmed. Hold it just short and mark it as approaching.</li>
+        <li>Widen the error band the longer the feed stays quiet. Carry the delay onto every later stop, and never leave a stop before its timetabled departure.</li>
+      </ol>
+      <p>Not handled yet: timetable slack that lets late trains catch up, real track geometry from OpenStreetMap, and passing-station reports. Real feeds include those reports, and they would shrink the error band a lot on long sections like Kota to New Delhi.</p>
+    </section>
+  </div>
+
+  <p class="foot">Timetable for 12951 from <a href="https://etrain.info/train/Mumbai-Rajdhani-12951/schedule" target="_blank" rel="noopener">etrain.info</a> and <a href="https://www.ixigo.com/trains/12951" target="_blank" rel="noopener">ixigo</a>, checked 17 Oct 2026. The run, its delays and the reporting lag are simulated. Unofficial. Not affiliated with Indian Railways. <a href="https://github.com/Christen1609/Indian-Railway-Tracker" target="_blank" rel="noopener">Source on GitHub</a>.</p>
+</div>
+
+<script id="engine">
+/* ================= ENGINE (no DOM) ================= */
+const POLL = 2; // minutes between polls of the provider API
+// Minutes from 00:00 on Day 1 (IST). Timetable: etrain.info / ixigo.
+const S = [
+  {code:'MMCT', name:'Mumbai Central', hi:'मुंबई सेंट्रल', arr:null, dep:1020, km:0,    lat:18.969, lon:72.820},
+  {code:'BVI',  name:'Borivali',       hi:'बोरीवली',      arr:1040, dep:1042, km:30,   lat:19.229, lon:72.857},
+  {code:'ST',   name:'Surat',          hi:'सूरत',         arr:1183, dep:1188, km:263,  lat:21.205, lon:72.841},
+  {code:'BRC',  name:'Vadodara Jn',    hi:'वडोदरा जं.',   arr:1266, dep:1276, km:392,  lat:22.310, lon:73.181},
+  {code:'RTM',  name:'Ratlam Jn',      hi:'रतलाम जं.',    arr:1465, dep:1468, km:653,  lat:23.331, lon:75.037},
+  {code:'NAD',  name:'Nagda Jn',       hi:'नागदा जं.',    arr:1508, dep:1510, km:695,  lat:23.456, lon:75.417},
+  {code:'KOTA', name:'Kota Jn',        hi:'कोटा जं.',     arr:1635, dep:1640, km:920,  lat:25.222, lon:75.874},
+  {code:'NDLS', name:'New Delhi',      hi:'नई दिल्ली',    arr:1952, dep:null, km:1384, lat:28.643, lon:77.219},
+];
+const L = S.length - 1;
+// Approximate shape points between stops (drawing only, not timetable data).
+const VIA = [
+  [],
+  [[20.37,72.91]],
+  [[21.70,72.99]],
+  [[22.78,73.61],[22.83,74.26]],
+  [],
+  [[24.18,75.63],[24.42,75.83],[24.65,75.94]],
+  [[26.02,76.35],[26.47,76.72],[26.91,77.29],[27.48,77.67],[28.14,77.33],[28.59,77.25]],
+];
+const runT  = i => S[i+1].arr - S[i].dep;   // timetabled run time of section i
+const haltT = i => S[i].dep - S[i].arr;     // timetabled halt at stop i
+const segKm = i => S[i+1].km - S[i].km;
+
+/* ---- simulated ground truth (the app never reads this) ---- */
+const SIM = {
+  departLate: 4,
+  factor: [1.10, 1.04, 1.05, 0.98, 1.05, 1.08, 0.95],
+  halt:   [null, 2, 6, 14, 3, 2, 7, null],
+  hold:   {seg: 2, at: 0.6, mins: 11},             // unscheduled signal stop near Bharuch
+  lag:    [2, 3, 2, 4, 3, 6, 2, 9, 5, 4, 3, 5, 4, 3] // minutes from event to appearing in the feed
+};
+const TRUTH = (() => {
+  const t = S.map(() => ({arr: null, dep: null}));
+  t[0].dep = S[0].dep + SIM.departLate;
+  for (let i = 0; i < L; i++) {
+    const hold = SIM.hold.seg === i ? SIM.hold.mins : 0;
+    t[i+1].arr = Math.round(t[i].dep + runT(i) * SIM.factor[i] + hold);
+    if (i + 1 < L) t[i+1].dep = Math.max(t[i+1].arr + SIM.halt[i+1], S[i+1].dep);
+  }
+  return t;
+})();
+function truthKm(now) {
+  if (now <= TRUTH[0].dep) return 0;
+  for (let i = 0; i < L; i++) {
+    const d = TRUTH[i].dep, a = TRUTH[i+1].arr;
+    if (now < d) return S[i].km;
+    if (now < a) {
+      const hold = SIM.hold.seg === i ? SIM.hold : null;
+      const moving = a - d - (hold ? hold.mins : 0);
+      let e = now - d;
+      if (hold) { const hs = hold.at * moving; if (e > hs) e = Math.max(hs, e - hold.mins); }
+      return S[i].km + Math.min(1, e / moving) * segKm(i);
+    }
+  }
+  return S[L].km;
+}
+function truthPts(now) {
+  const t0 = TRUTH[0].dep; if (now < t0) return [];
+  const all = [[t0, 0]];
+  for (let i = 0; i < L; i++) {
+    const d = TRUTH[i].dep, a = TRUTH[i+1].arr;
+    if (i > 0) all.push([d, S[i].km]);
+    if (SIM.hold.seg === i) {
+      const moving = a - d - SIM.hold.mins, hs = d + SIM.hold.at * moving, hk = S[i].km + SIM.hold.at * segKm(i);
+      all.push([hs, hk], [hs + SIM.hold.mins, hk]);
+    }
+    all.push([a, S[i+1].km]);
+  }
+  const pts = [];
+  for (const p of all) { if (p[0] <= now) pts.push(p); else break; }
+  pts.push([now, truthKm(now)]);
+  return pts;
+}
+/* the feed: one event per arrival and departure, visible after a reporting lag */
+const EVENTS = (() => {
+  const ev = [];
+  for (let i = 0; i <= L; i++) {
+    if (i > 0) ev.push({i, type: 'ARR', at: TRUTH[i].arr});
+    if (i < L) ev.push({i, type: 'DEP', at: TRUTH[i].dep});
+  }
+  ev.forEach((e, k) => { e.seq = k; e.lag = SIM.lag[k]; e.seenAt = e.at + e.lag; });
+  return ev;
+})();
+
+/* ---- projection: delay carried forward, never leaving a stop early ---- */
+function project(from, depTime, firstArrFloor) {
+  const out = [];
+  let dep = depTime;
+  for (let j = from + 1; j <= L; j++) {
+    let arr = dep + runT(j - 1);
+    if (j === from + 1 && firstArrFloor != null) arr = Math.max(arr, firstArrFloor);
+    out[j] = {arr};
+    if (j < L) { dep = Math.max(arr + haltT(j), S[j].dep); out[j].dep = dep; }
+  }
+  return out;
+}
+
+/* ---- the estimator: only schedule + feed + clock ---- */
+function estimate(now) {
+  const polled = Math.floor(now / POLL) * POLL;
+  const seen = EVENTS.filter(e => e.seenAt <= polled);
+  const last = seen.length ? seen[seen.length - 1] : null;
+  const known = S.map(() => ({arr: null, dep: null}));
+  seen.forEach(e => { known[e.i][e.type === 'ARR' ? 'arr' : 'dep'] = e.at; });
+  const r = {now, polled, seen, last, known, proj: [], overdue: false};
+
+  const dead = (i, t, base, rate, lockLo) => {
+    const run = runT(i), elapsed = Math.max(0, now - t), spd = segKm(i) / run, frac = elapsed / run;
+    r.seg = i; r.frac = Math.min(frac, 0.98); r.overdue = frac >= 1;
+    r.km = S[i].km + r.frac * segKm(i);
+    const hw = base + rate * elapsed * spd;
+    r.lo = lockLo ? S[i].km : Math.max(S[i].km, r.km - hw);
+    r.hi = r.overdue ? S[i+1].km : Math.min(S[i+1].km, r.km + hw);
+    r.proj = project(i, t, r.overdue ? now + 1 : null);
+    r.delay = r.proj[i+1].arr - S[i+1].arr;
+  };
+
+  if (!last) {
+    r.stop = 0; r.km = 0; r.lo = 0;
+    if (now < S[0].dep) { r.state = 'scheduled'; r.hi = 0; r.delay = 0; r.proj = project(0, S[0].dep); }
+    else {
+      r.state = 'awaiting'; r.delay = now - S[0].dep;
+      r.hi = Math.min(segKm(0), (now - S[0].dep) * segKm(0) / runT(0));
+      r.proj = project(0, now); r.proj[0] = {dep: now};
+    }
+  } else if (last.type === 'DEP') {
+    r.state = 'running'; dead(last.i, last.at, 1.5, 0.25, false);
+  } else if (last.i === L) {
+    r.state = 'arrived'; r.stop = L; r.km = r.lo = r.hi = S[L].km; r.delay = last.at - S[L].arr;
+  } else {
+    const i = last.i, expDep = Math.max(last.at + haltT(i), S[i].dep);
+    r.expDep = expDep;
+    if (now < expDep) {
+      r.state = 'halted'; r.stop = i; r.km = r.lo = r.hi = S[i].km; r.delay = last.at - S[i].arr;
+      r.proj = project(i, expDep); r.proj[i] = {dep: expDep};
+    } else {
+      r.state = 'inferred'; dead(i, expDep, 3, 0.35, true); r.proj[i] = {dep: expDep};
+    }
+  }
+  r.pos = (r.state === 'running' || r.state === 'inferred') ? r.seg + r.frac : r.stop;
+
+  const chain = from => {
+    const pts = [];
+    for (let j = from; j <= L; j++) {
+      const p = r.proj[j]; if (!p) continue;
+      if (p.arr != null) pts.push([p.arr, S[j].km]);
+      if (p.dep != null && j < L) pts.push([p.dep, S[j].km]);
+    }
+    return pts;
+  };
+  switch (r.state) {
+    case 'scheduled': r.anchor = []; r.future = [[S[0].dep, 0], ...chain(1)]; break;
+    case 'awaiting':  r.anchor = [[S[0].dep, 0], [now, 0]]; r.future = [[now, 0], ...chain(1)]; break;
+    case 'running':   r.anchor = [[last.at, S[last.i].km], [now, r.km]]; r.future = [[now, r.km], ...chain(r.seg + 1)]; break;
+    case 'halted':    r.anchor = [[last.at, r.km], [now, r.km]]; r.future = [[now, r.km], [r.expDep, r.km], ...chain(r.stop + 1)]; break;
+    case 'inferred':  r.anchor = [[last.at, S[last.i].km], [r.expDep, S[last.i].km], [now, r.km]]; r.future = [[now, r.km], ...chain(r.seg + 1)]; break;
+    default:          r.anchor = []; r.future = [];
+  }
+  return r;
+}
+
+/* ---- formatting ---- */
+function hhmm(m) {
+  m = Math.round(m);
+  const mm = ((m % 1440) + 1440) % 1440;
+  return String(Math.floor(mm / 60)).padStart(2, '0') + ':' + String(mm % 60).padStart(2, '0');
+}
+const dayOf = m => Math.floor(Math.round(m) / 1440) + 1;
+function delayText(d) { d = Math.round(d); if (d <= 0) return d < -1 ? `${-d} min early` : 'On time'; return `${d} min late`; }
+function delayCls(d) { d = Math.round(d); return d <= 0 ? 'ok' : d <= 15 ? 'warn' : 'late'; }
+</script>
+
+<script>
+/* ================= UI ================= */
+(function () {
+  const $ = id => document.getElementById(id);
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let now = 1265, playing = !reduce, speed = 60, showTruth = true, lastKey = '';
+  const T0 = 990, T1 = 2010;
+
+  /* ---------- map ---------- */
+  const M = {W: 400, H: 640, latMax: 29.2, latMin: 18.4, lonMin: 71.8, lonMax: 78.2, mx: 40, my: 24};
+  const kx = Math.cos((M.latMax + M.latMin) / 2 * Math.PI / 180);
+  const sc = Math.min((M.W - 2 * M.mx) / ((M.lonMax - M.lonMin) * kx), (M.H - 2 * M.my) / (M.latMax - M.latMin));
+  const px = (lat, lon) => [M.mx + (lon - M.lonMin) * kx * sc, M.my + (M.latMax - lat) * sc];
+
+  const ROUTE = [];
+  for (let i = 0; i < L; i++) {
+    const pts = [[S[i].lat, S[i].lon], ...VIA[i], [S[i+1].lat, S[i+1].lon]].map(([a, b]) => px(a, b));
+    const cum = [0]; let len = 0;
+    for (let p = 1; p < pts.length; p++) { len += Math.hypot(pts[p][0] - pts[p-1][0], pts[p][1] - pts[p-1][1]); cum.push(len); }
+    pts.forEach((p, idx) => { if (i > 0 && idx === 0) return; ROUTE.push({x: p[0], y: p[1], km: S[i].km + cum[idx] / len * segKm(i)}); });
+  }
+  function pointAt(km) {
+    km = Math.max(0, Math.min(S[L].km, km));
+    for (let p = 1; p < ROUTE.length; p++) {
+      if (km <= ROUTE[p].km) {
+        const a = ROUTE[p-1], b = ROUTE[p], f = (km - a.km) / ((b.km - a.km) || 1);
+        return [a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f];
+      }
+    }
+    const e = ROUTE[ROUTE.length - 1]; return [e.x, e.y];
+  }
+  function pathBetween(lo, hi) {
+    const pts = [pointAt(lo)];
+    ROUTE.forEach(p => { if (p.km > lo && p.km < hi) pts.push([p.x, p.y]); });
+    pts.push(pointAt(hi));
+    return 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L');
+  }
+  const LBL = {
+    MMCT: {dx: 10, dy: 12, a: 'start'}, BVI: {dx: 10, dy: -5, a: 'start'}, ST: {dx: 10, dy: 3, a: 'start'},
+    BRC: {dx: 10, dy: 16, a: 'start'}, RTM: {dx: 6, dy: 21, a: 'start'}, NAD: {dx: 10, dy: -2, a: 'start'},
+    KOTA: {dx: -10, dy: 3, a: 'end'}, NDLS: {dx: -10, dy: -8, a: 'end'}
+  };
+  (function buildMap() {
+    let s = '';
+    for (const lat of [20, 22, 24, 26, 28]) { const y = px(lat, 0)[1]; s += `<line class="g-line" x1="0" x2="${M.W}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="g-lbl" x="${M.W - 4}" y="${(y - 4).toFixed(1)}" text-anchor="end">${lat}°N</text>`; }
+    for (const lon of [73, 75, 77]) { const x = px(0, lon)[0]; s += `<line class="g-line" y1="0" y2="${M.H}" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}"/><text class="g-lbl" x="${(x + 4).toFixed(1)}" y="${M.H - 6}">${lon}°E</text>`; }
+    const full = pathBetween(0, S[L].km);
+    s += `<path class="rail-a" d="${full}"/><path class="rail-b" d="${full}"/>`;
+    s += `<path class="band" id="m-band" d=""/>`;
+    S.forEach(st => {
+      const [x, y] = px(st.lat, st.lon), c = LBL[st.code], cw = st.code.length * 7.6 + 10;
+      const cyy = y + c.dy, rx = c.a === 'start' ? x + c.dx : x + c.dx - cw;
+      const nx = c.a === 'start' ? rx + cw + 5 : rx - 5;
+      s += `<rect class="stn" x="${(x - 4.5).toFixed(1)}" y="${(y - 4.5).toFixed(1)}" width="9" height="9"/>`;
+      s += `<rect class="chip" x="${rx.toFixed(1)}" y="${(cyy - 8.5).toFixed(1)}" width="${cw.toFixed(1)}" height="17" rx="1.5"/>`;
+      s += `<text class="chip-t" x="${(rx + cw / 2).toFixed(1)}" y="${(cyy + 4.6).toFixed(1)}" text-anchor="middle">${st.code}</text>`;
+      s += `<text class="stn-n" x="${nx.toFixed(1)}" y="${(cyy + 4).toFixed(1)}" text-anchor="${c.a}">${st.name}</text>`;
+    });
+    s += `<circle class="ghost" id="m-ghost" r="7" cx="0" cy="0"/>`;
+    s += `<g id="m-train"><circle class="pulse" r="13" cx="0" cy="0"/><circle class="mk" r="8.5" cx="0" cy="0"/><circle class="mk-dot" r="2.6" cx="0" cy="0"/></g>`;
+    $('map').innerHTML = s;
+  })();
+  function updateMap(r) {
+    const [x, y] = pointAt(r.km);
+    $('m-train').setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    $('m-band').setAttribute('d', pathBetween(r.lo, Math.max(r.hi, r.lo + 0.01)));
+    const g = $('m-ghost');
+    if (showTruth) { const [gx, gy] = pointAt(truthKm(r.now)); g.setAttribute('cx', gx.toFixed(1)); g.setAttribute('cy', gy.toFixed(1)); g.removeAttribute('display'); }
+    else g.setAttribute('display', 'none');
+  }
+
+  /* ---------- chart ---------- */
+  const C = {W: 900, H: 360, ml: 58, mr: 16, mt: 22, mb: 30};
+  const cx = t => C.ml + (Math.max(T0, Math.min(T1, t)) - T0) / (T1 - T0) * (C.W - C.ml - C.mr);
+  const cy = km => C.H - C.mb - km / S[L].km * (C.H - C.mt - C.mb);
+  const pathOf = pts => pts.length ? 'M' + pts.map(([t, k]) => cx(t).toFixed(1) + ' ' + cy(k).toFixed(1)).join(' L') : '';
+  const schedPts = (() => { const p = [[S[0].dep, 0]]; for (let j = 1; j <= L; j++) { p.push([S[j].arr, S[j].km]); if (j < L) p.push([S[j].dep, S[j].km]); } return p; })();
+  const chartStatic = (() => {
+    let s = '';
+    const nudge = {RTM: 4, NAD: -4};
+    S.forEach(st => {
+      const y = cy(st.km);
+      s += `<line class="c-grid" x1="${C.ml}" x2="${C.W - C.mr}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>`;
+      if (st.code !== 'BVI') s += `<text class="c-code" x="${C.ml - 8}" y="${(y + 4.5 + (nudge[st.code] || 0)).toFixed(1)}" text-anchor="end">${st.code}</text>`;
+    });
+    for (let t = 1080; t <= 1920; t += 120) {
+      const x = cx(t);
+      s += `<line class="c-grid" y1="${C.mt}" y2="${C.H - C.mb}" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}"/><text class="c-lbl" x="${x.toFixed(1)}" y="${C.H - 10}" text-anchor="middle">${hhmm(t)}</text>`;
+    }
+    s += `<text class="c-lbl" x="${(cx(1440) + 4).toFixed(1)}" y="${C.mt - 8}">Sun 18 Oct</text><text class="c-lbl" x="${C.ml}" y="${C.mt - 8}">Sat 17 Oct</text>`;
+    s += `<path class="c-sched" d="${pathOf(schedPts)}"/>`;
+    return s;
+  })();
+  function renderChart(r) {
+    let s = chartStatic;
+    if (showTruth) s += `<path class="c-truth" d="${pathOf(truthPts(r.now))}"/>`;
+    const conf = r.seen.map(e => [e.at, S[e.i].km]);
+    s += `<path class="c-conf" d="${pathOf(conf)}"/>`;
+    s += `<path class="c-fut" d="${pathOf(r.future)}"/>`;
+    s += `<path class="c-est" d="${pathOf(r.anchor)}"/>`;
+    conf.forEach(([t, k]) => { s += `<circle class="c-evt" r="3.6" cx="${cx(t).toFixed(1)}" cy="${cy(k).toFixed(1)}"/>`; });
+    const x = cx(r.now);
+    s += `<line class="c-now" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${C.mt}" y2="${C.H - C.mb}"/>`;
+    const yl = cy(r.lo), yh = cy(r.hi);
+    s += `<rect class="c-band" x="${(x - 5).toFixed(1)}" y="${yh.toFixed(1)}" width="10" height="${Math.max(0, yl - yh).toFixed(1)}" rx="3"/>`;
+    s += `<circle class="c-mk" r="5.5" cx="${x.toFixed(1)}" cy="${cy(r.km).toFixed(1)}"/>`;
+    const right = x > C.W - 80;
+    s += `<text class="c-nowt" x="${(right ? x - 6 : x + 6).toFixed(1)}" y="${C.mt + 10}" text-anchor="${right ? 'end' : 'start'}">${hhmm(r.now)}</text>`;
+    $('chart').innerHTML = s;
+  }
+
+  /* ---------- status ---------- */
+  const nameOf = i => S[i].name;
+  function renderStatus(r) {
+    let line = '', sub = '';
+    switch (r.state) {
+      case 'scheduled': line = `Scheduled to leave ${nameOf(0)}`; sub = `Timetabled departure ${hhmm(S[0].dep)}.`; break;
+      case 'awaiting':  line = `Due out of ${nameOf(0)}`; sub = 'Departure not reported yet.'; break;
+      case 'running':
+        if (r.overdue) { line = `Approaching ${nameOf(r.seg + 1)}`; sub = 'Arrival is due but not reported yet. Holding the estimate short of the station.'; }
+        else { line = `Between ${nameOf(r.seg)} and ${nameOf(r.seg + 1)}`; sub = `Left ${nameOf(r.seg)} at ${hhmm(r.last.at)}.`; }
+        break;
+      case 'halted':    line = `At ${nameOf(r.stop)}`; sub = `Arrived ${hhmm(r.last.at)}. Expected to leave ${hhmm(r.expDep)}.`; break;
+      case 'inferred':  line = `Probably left ${nameOf(r.seg)}`; sub = `Departure not confirmed yet. Assuming ${hhmm(r.expDep)}.`; break;
+      case 'arrived':   line = `Arrived at ${nameOf(L)}`; sub = `Reached ${hhmm(r.last.at)}.`; break;
+    }
+    $('st-line').textContent = line;
+    $('st-sub').textContent = sub;
+    const pill = $('st-pill');
+    pill.textContent = r.state === 'scheduled' ? 'Not started' : delayText(r.delay);
+    pill.className = 'pill ' + (r.state === 'scheduled' ? 'ok' : delayCls(r.delay));
+
+    const f = [];
+    const next = r.state === 'arrived' ? null : (r.state === 'running' || r.state === 'inferred') ? r.seg + 1 : r.stop + 1;
+    if (next != null && r.proj[next]) {
+      f.push(['Next stop', `<span class="code">${S[next].code}</span> ${hhmm(r.proj[next].arr)} <small>expected · about ${Math.round(S[next].km - r.km)} km to go</small>`]);
+    }
+    if (r.last) {
+      const verb = r.last.type === 'ARR' ? 'Arrived' : 'Left';
+      f.push(['Last report', `${verb} ${S[r.last.i].code} ${hhmm(r.last.at)} <small>in feed at ${hhmm(r.last.seenAt)}, ${Math.round(r.now - r.last.at)} min ago</small>`]);
+    } else {
+      f.push(['Last report', `None yet <small>polling every ${POLL} min</small>`]);
+    }
+    const hw = Math.round((r.hi - r.lo) / 2);
+    f.push(['Position', `km ${Math.round(r.km).toLocaleString('en-IN')} of ${S[L].km.toLocaleString('en-IN')} <small>${hw > 0 ? `± ${hw} km` : 'confirmed at station'}</small>`]);
+    if (showTruth) {
+      const diff = Math.round(r.km - truthKm(r.now));
+      const inside = truthKm(r.now) >= r.lo - 0.5 && truthKm(r.now) <= r.hi + 0.5;
+      const txt = Math.abs(diff) < 1 ? 'Matches actual' : `${Math.abs(diff)} km ${diff > 0 ? 'ahead of' : 'behind'} actual`;
+      f.push(['Estimate vs actual', `<span class="err">${txt}</span> <small>${inside ? 'actual is inside the error band' : 'actual is outside the error band'}</small>`]);
+    }
+    $('facts').innerHTML = f.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  }
+
+  /* ---------- stops ---------- */
+  function cell(r, j, kind, passed) {
+    const sched = kind === 'arr' ? S[j].arr : S[j].dep;
+    if (sched == null) return `<div class="tm"><span class="s">${j === 0 ? 'Starts' : 'Ends'}</span></div>`;
+    const k = r.known[j][kind], p = (r.proj[j] || {})[kind];
+    let a = '';
+    if (k != null) a = `<span class="a">${hhmm(k)}</span>`;
+    else if (p != null) a = `<span class="a exp">${hhmm(p)}</span>`;
+    else if (passed) a = `<span class="a nr">not reported</span>`;
+    return `<div class="tm"><span class="s" data-k="${kind === 'arr' ? 'Arr' : 'Dep'}">${hhmm(sched)}</span>${a}</div>`;
+  }
+  function renderStops(r) {
+    let h = '';
+    S.forEach((st, j) => {
+      const cls = j < r.pos ? 'passed' : j === r.pos ? 'here' : 'ahead';
+      const passed = cls === 'passed';
+      const k = r.known[j], p = r.proj[j] || {};
+      let d = null, exp = false;
+      if (j > 0) { const t = k.arr != null ? k.arr : p.arr; if (t != null) { d = t - st.arr; exp = k.arr == null; } }
+      else { const t = k.dep != null ? k.dep : p.dep; if (t != null) { d = t - st.dep; exp = k.dep == null; } }
+      const chip = d == null ? '' : `<span class="dly ${delayCls(d)}${exp ? ' exp' : ''}" title="${exp ? 'Expected' : 'Reported'}">${delayText(d)}</span>`;
+      h += `<li class="row ${cls}">
+        <div class="c-rail"><span class="dot"></span></div>
+        <div class="c-stn"><div class="l1"><span class="code">${st.code}</span><span class="nmx">${st.name}</span></div><div class="hi" lang="hi">${st.hi}</div></div>
+        <div class="c-arr">${cell(r, j, 'arr', passed)}</div>
+        <div class="c-dep">${cell(r, j, 'dep', passed)}</div>
+        <div class="c-dly">${chip}</div>
+      </li>`;
+    });
+    h += `<div class="rail-full" id="rf"></div><div class="rail-done" id="rd"></div><div class="trainmk" id="tmk" aria-hidden="true"></div>`;
+    $('stops').innerHTML = h;
+  }
+  function placeListTrain(r) {
+    const dots = $('stops').querySelectorAll('.dot');
+    if (!dots.length) return;
+    const y = j => dots[j].offsetTop + dots[j].offsetHeight / 2;
+    const j0 = Math.min(L, Math.floor(r.pos)), f = r.pos - j0;
+    const ty = j0 < L ? y(j0) + (y(j0 + 1) - y(j0)) * f : y(L);
+    const top = y(0), bot = y(L);
+    const rf = $('rf'), rd = $('rd'), mk = $('tmk');
+    rf.style.top = top + 'px'; rf.style.height = (bot - top) + 'px';
+    rd.style.top = top + 'px'; rd.style.height = Math.max(0, ty - top) + 'px';
+    mk.style.transform = `translateY(${(ty - 9).toFixed(1)}px)`;
+  }
+
+  /* ---------- feed ---------- */
+  function renderFeed(r) {
+    const e = r.last;
+    const snap = {
+      train: '12951',
+      journey_date: '2026-10-17',
+      polled_at: hhmm(r.polled),
+      last_event: e ? {station: S[e.i].code, event: e.type === 'ARR' ? 'ARRIVED' : 'DEPARTED', at: hhmm(e.at), reported_at: hhmm(e.seenAt)} : null,
+      delay_min: e ? Math.round(e.at - (e.type === 'ARR' ? S[e.i].arr : S[e.i].dep)) : null
+    };
+    $('snap').textContent = JSON.stringify(snap, null, 2);
+    const recent = r.seen.slice(-6).reverse();
+    $('log').innerHTML = recent.length ? recent.map(ev =>
+      `<li><span class="ev">${ev.type === 'ARR' ? 'ARR' : 'DEP'}</span><span class="code">${S[ev.i].code}</span><span class="when">happened <b>${hhmm(ev.at)}</b>, in feed ${hhmm(ev.seenAt)} (+${ev.lag} min)</span></li>`).join('')
+      : `<li><span class="ev">··</span><span></span><span class="when">No events yet. The first one is the departure from MMCT.</span></li>`;
+    const pend = EVENTS.filter(ev => ev.at <= r.now && ev.seenAt > r.polled);
+    const pe = $('pending');
+    if (showTruth && pend.length) { pe.hidden = false; pe.textContent = `Sim only: ${pend.length === 1 ? 'one event has' : pend.length + ' events have'} happened but ${pend.length === 1 ? "isn't" : "aren't"} in the feed yet (${pend.map(ev => (ev.type === 'ARR' ? 'arrived ' : 'left ') + S[ev.i].code).join(', ')}).`; }
+    else pe.hidden = true;
+  }
+
+  /* ---------- clock + loop ---------- */
+  function renderClock() {
+    $('clk').textContent = hhmm(now);
+    $('clkd').textContent = (dayOf(now) === 1 ? 'Sat 17 Oct' : 'Sun 18 Oct') + ', Day ' + dayOf(now);
+    $('scrub').value = Math.round(now);
+  }
+  function render(force) {
+    const r = estimate(now);
+    updateMap(r);
+    renderClock();
+    const key = Math.floor(now) + '|' + showTruth;
+    if (force || key !== lastKey) { lastKey = key; renderStatus(r); renderStops(r); renderChart(r); renderFeed(r); }
+    placeListTrain(r);
+  }
+  function setPlaying(p) {
+    playing = p;
+    const b = $('play'); b.textContent = p ? 'Pause' : 'Play'; b.setAttribute('aria-label', p ? 'Pause' : 'Play');
+  }
+  let prev = null;
+  function tick(ts) {
+    if (prev != null && playing) {
+      const dt = Math.min(0.25, (ts - prev) / 1000);
+      now += dt * speed / 60;
+      if (now >= T1) { now = T1; setPlaying(false); }
+      render(false);
+    }
+    prev = ts;
+    requestAnimationFrame(tick);
+  }
+
+  $('play').addEventListener('click', () => { if (!playing && now >= T1) now = T0; setPlaying(!playing); });
+  $('speeds').addEventListener('click', e => {
+    const b = e.target.closest('button[data-s]'); if (!b) return;
+    speed = +b.dataset.s;
+    $('speeds').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+  });
+  $('scrub').addEventListener('input', e => { now = +e.target.value; render(true); });
+  $('truth').addEventListener('change', e => {
+    showTruth = e.target.checked;
+    $('lg-ghost').hidden = !showTruth; $('lg-ctruth').hidden = !showTruth;
+    render(true);
+  });
+  window.addEventListener('resize', () => placeListTrain(estimate(now)));
+
+  setPlaying(playing);
+  render(true);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => placeListTrain(estimate(now)));
+  requestAnimationFrame(tick);
+})();
+</script>
   </body>
 </html>
