@@ -159,7 +159,7 @@ export type RawFetch = {
 Parsers live in `packages/core`, are pure, and are tested against saved real responses in `fixtures/<source>/`. Fixtures exist only so tests don't burn real quota. The app never loads them.
 
 ```ts
-// packages/core/src/sources/railradar.parse.ts (one file per source)
+// packages/core/src/sources/railradar.ts (one file per source: schema and parser)
 
 /** Turns one raw response into source events. Pure. Invalid input returns errors, never throws. */
 export function parseRailRadar(raw: RawFetch, ctx: ParseContext): ParseResult;

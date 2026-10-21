@@ -29,7 +29,9 @@ A live tracker for Indian trains. It merges several free, unofficial feeds into 
 11. Compute delay from confirmed time minus timetable. Never copy a source's delay.
 12. Never put API keys in `apps/web` or in any `VITE_` variable.
 13. No new dependencies, schema changes or `.env` changes without saying so clearly in your summary.
-14. No commented-out code. No TODO without an owner and issue number.
+14. No commented-out code. No TODOs. Open an issue instead.
+15. Reuse before you create. Run the function and file checklists in `docs/CODING_STANDARDS.md` before writing either.
+16. Comments: a one-line function comment, an output line where you use another function's output, a features line on a file holding more than one feature. Nothing else.
 
 ## How to work
 
@@ -37,7 +39,8 @@ A live tracker for Indian trains. It merges several free, unofficial feeds into 
 - Parser tests use real responses from `fixtures/<source>/`. If you need a fixture that doesn't exist, stop and ask for one. Don't invent API responses.
 - Any change to the scheduler must show, in the PR, how many calls a full 12951 trip costs before and after.
 - Keep changes small and on one topic. One PR does one thing.
-- Comments explain why, not what. See the examples in `docs/CODING_STANDARDS.md`.
+- Your summary lists every new function and new file, with the checklist step that allowed it.
+- The why goes in the docs, never in a comment. If a rule or number needs explaining, explain it in `docs/`.
 - If a doc is wrong or out of date, fix the doc in the same change and say so.
 - If a task conflicts with these rules, say so before writing code.
 
