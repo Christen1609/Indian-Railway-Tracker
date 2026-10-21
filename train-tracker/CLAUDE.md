@@ -46,14 +46,20 @@ A live tracker for Indian trains. It merges several free, unofficial feeds into 
 
 ## Commands
 
-Planned. Update this list when the tooling lands in M0.
+Working now:
 
 ```
 pnpm install          # install everything
-pnpm dev              # web + ingest in watch mode, against local Supabase
 pnpm test             # all tests
 pnpm lint             # ESLint + Prettier check
 pnpm typecheck        # tsc across the workspace
+pnpm format           # Prettier write
+```
+
+Not built yet. Add each one here as it lands:
+
+```
+pnpm dev              # web + ingest in watch mode, against local Supabase
 pnpm preflight        # before any demo: keys, calls left, API speed, trains running now
 pnpm calls 12951      # dry run: how many calls a full trip of this train would cost
 ```
