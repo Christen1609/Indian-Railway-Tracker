@@ -1,0 +1,11 @@
+{
+  "name": "@train-tracker/refdata",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "load": "node --env-file=../../.env --experimental-strip-types src/load.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}
