@@ -8,7 +8,6 @@ How the pieces fit. Read PRODUCT.md first for what we are building and DATA_SOUR
 flowchart LR
   subgraph Sources
     RR[RailRadar API]
-    RA[RapidAPI IRCTC1]
     SC[RailYatri scrape]
   end
   subgraph ingest["apps/ingest (Node worker)"]
@@ -23,7 +22,7 @@ flowchart LR
     RE[(resolved_events)]
     TS[(train_state)]
   end
-  RR & RA & SC --> AD
+  RR & SC --> AD
   AD --> RAW
   RAW --> PA
   NV --> SE
@@ -56,7 +55,7 @@ train-tracker/
 │   ├── ingest/            Node worker. All network and database I/O lives here.
 │   │   └── src/
 │   │       ├── adapters/  One file per source. Fetch only.
-│   │       ├── scheduler/ Window scheduler, watcher gating, quota guard, backoff, failover.
+│   │       ├── scheduler/ Window scheduler, watcher gating, quota guard, backoff.
 │   │       ├── jobs/      Scoring, learned caps and retention, after a journey ends.
 │   │       ├── db/        Queries. No SQL anywhere else.
 │   │       ├── preflight.ts  Pre-demo checks.

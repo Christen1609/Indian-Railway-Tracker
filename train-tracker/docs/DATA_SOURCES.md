@@ -10,8 +10,7 @@ Everything here is free. Nothing may need a card. Last checked: 21 Oct 2026. Rec
 
 | ID | Source | Auth | Env var | Free quota | Use it for | Risk |
 |----|--------|------|---------|-----------|------------|------|
-| `railradar` | RailRadar API, `https://api.railradar.in/v1` | `Authorization: Bearer <key>` or `X-API-Key` | `RAILRADAR_API_KEY` | 100 requests/month (sandbox, no card) | Primary keyed source. Per-train live status and the snapshot. | Snapshot endpoint is marked legacy. |
-| `rapidapi_irctc1` | RapidAPI "IRCTC1", host `irctc1.p.rapidapi.com` | `X-RapidAPI-Key` and `X-RapidAPI-Host` | `RAPIDAPI_KEY` | Very small. One project reports 20 calls/month. Unverified. | Failover and scored trips. | Pick a plan with a hard limit and no overage. If it asks for a card, skip it. |
+| `railradar` | RailRadar API, `https://api.railradar.in/v1` | `Authorization: Bearer <key>` or `X-API-Key` | `RAILRADAR_API_KEY` | 100 requests/month (sandbox, no card) | The only keyed source. Per-train live status and the snapshot. | Snapshot endpoint is marked legacy. |
 | `railyatri_scrape` | RailYatri live status page, `https://www.railyatri.in/live-train-status/<slug>` | None | None | Self-imposed: 1 request per minute total | Free second opinion on every check. Last-resort fallback. | HTML can change any day. Scraping may breach their terms. Personal demo use only. |
 
 RailRadar endpoints we use:
@@ -27,10 +26,15 @@ The docs only show part of the live response. Save a real response as a fixture 
 
 Someone has to sign up by hand. AI can't do it for you.
 
-1. RailRadar: sign up at railradar.in, then create a key at `https://railradar.in/developers`.
-2. RapidAPI: sign up at rapidapi.com, open the IRCTC1 listing, subscribe to the free plan.
-3. Put both keys in `.env` (never committed). See `.env.example`.
-4. Email RailRadar: portfolio project, ask for a higher free quota. Costs nothing to ask.
+1. RailRadar: sign up at railradar.in, then create a key at `https://railradar.in/developers`. Activation needs an Indian +91 mobile number for an OTP.
+2. Put the key in `.env` (never committed). See `.env.example`.
+3. Email RailRadar: portfolio project, ask for a higher free quota. Costs nothing to ask.
+
+### Dropped sources
+
+**RapidAPI IRCTC1**, dropped 22 Oct 2026. It was meant to be the failover key and the third opinion on scored trips. Two things killed it. The free Basic plan is 10 requests a month, not the 20 we had assumed, which is less than the 25 one scored 12951 trip costs, so it could never have scored a trip. And its pricing FAQ has an entry titled "Why Do You Require A Credit Card For A Freemium API?", so a card may be required even at $0, which hard rule 1 forbids.
+
+That leaves one keyed source and one scrape. The consequences are written into the sections below: there is nothing to fail over to, and the best confidence a single-source confirmation can reach is `medium`.
 
 ## Static sources
 
@@ -91,9 +95,8 @@ There is no check in the middle of long sections. On Kota to New Delhi that mean
 
 ### What one check does
 
-1. Call one keyed source, in trust order. If it fails, try the next.
+1. Call RailRadar. It is the only keyed source, so a failure here cannot be covered by another key.
 2. Also scrape RailYatri once, if enabled. Free, and it gives us a second opinion to merge.
-3. On the monthly scored trip only: once a stop's arrival is confirmed, call RapidAPI once for its version. That gives every source a report to score.
 
 ### Quota guard
 
@@ -107,11 +110,11 @@ Free tiers are tiny, so spending is controlled in code.
 
 ### Monthly budget on free tiers
 
-| Use | RailRadar (100) | RapidAPI (~20) | Scrape |
-|-----|-----------------|----------------|--------|
-| Development and testing | 20 | 3 | Free |
-| One scored trip (12951, 7 stops) | 25 | 7 | Free |
-| Demo reserve | 55 | 10 | Free |
+| Use | RailRadar (100) | Scrape |
+|-----|-----------------|--------|
+| Development and testing | 20 | Free |
+| One scored trip (12951, 7 stops) | 25 | Free |
+| Demo reserve | 55 | Free |
 
 One demo costs about 6 RailRadar calls: preflight 1, picker 1, catch-up 1, about 3 window checks. That is about 9 demos a month.
 
@@ -125,7 +128,7 @@ One demo costs about 6 RailRadar calls: preflight 1, picker 1, catch-up 1, about
 ## Failover during a demo
 
 1. The failing source's circuit opens.
-2. The next check uses the next source in trust order.
+2. There is no second key to fall back to. The next check runs on the scrape alone, and confidence falls to `low`, because only a source of trust 0.5 is reporting out of the 1.3 we asked.
 3. If every source is down, nothing new is confirmed. The dot keeps moving on pace, the zone keeps widening, and the app shows how long since the last update.
 
 ## Adapter contract
@@ -135,7 +138,7 @@ Every source is one adapter. Fetching and parsing are separate, so the raw respo
 ```ts
 // apps/ingest/src/adapters/types.ts
 
-export type SourceId = 'railradar' | 'rapidapi_irctc1' | 'railyatri_scrape';
+export type SourceId = 'railradar' | 'railyatri_scrape';
 
 export interface SourceAdapter {
   readonly id: SourceId;
@@ -235,7 +238,6 @@ A source we asked that said nothing counts against the score.
 | Example | Score | Level |
 |---------|-------|-------|
 | RailRadar (0.8) and the scrape (0.5) agree | 1.3 ÷ 1.3 = 1.00 | `high` |
-| RailRadar and RapidAPI (0.7) agree, the scrape disagrees | 1.5 ÷ 2.0 = 0.75 | `high` |
 | RailRadar reports, the scrape says nothing | 0.8 ÷ 1.3 = 0.62 | `medium` |
 | Only the scrape reports, RailRadar was asked | 0.5 ÷ 1.3 = 0.38 | `low` |
 
@@ -264,7 +266,7 @@ Starting formula, to be tuned:
 trust = coverage / (1 + errorMin + lagMin / 10)
 ```
 
-Rolling window of the last 20 scored trips. Until a source has 5, use the prior: `railradar` 0.8, `rapidapi_irctc1` 0.7, `railyatri_scrape` 0.5.
+Rolling window of the last 20 scored trips. Until a source has 5, use the prior: `railradar` 0.8, `railyatri_scrape` 0.5.
 
 Known weak spots:
 

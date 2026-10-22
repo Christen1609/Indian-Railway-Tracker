@@ -3,7 +3,7 @@
 export type IsoDate = string;
 export type IsoUtc = string;
 
-export type SourceId = 'railradar' | 'rapidapi_irctc1' | 'railyatri_scrape';
+export type SourceId = 'railradar' | 'railyatri_scrape';
 export type EventType = 'ARR' | 'DEP' | 'PASS';
 export type Confidence = 'high' | 'medium' | 'low';
 export type JourneyStatus = 'scheduled' | 'running' | 'arrived' | 'cancelled';

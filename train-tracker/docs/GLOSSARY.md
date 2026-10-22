@@ -24,7 +24,7 @@ Use these words, spelled this way, in code, comments and UI. If a new term comes
 
 | Term | Meaning | In code |
 |------|---------|---------|
-| Source | One live feed: RailRadar, RapidAPI IRCTC1, or the RailYatri scrape. Never named in the web app. | `SourceId` |
+| Source | One live feed: the RailRadar API or the RailYatri scrape. Never named in the web app. | `SourceId` |
 | Check | One trip to the sources for one journey: one keyed call plus one scrape. | `runCheck()` |
 | Event | One fact from a feed: arrived at, departed or passed a station at a time. | `SourceEvent` |
 | Event type | `ARR` arrived, `DEP` departed, `PASS` passed without stopping. | `EventType` |

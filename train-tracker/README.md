@@ -43,4 +43,4 @@ There is no offline mode, by design. Before any demo, run `pnpm preflight`.
 - Station and train data: [datameet/railways](https://github.com/datameet/railways), CC0.
 - Map data: © OpenStreetMap contributors, ODbL. Map tiles: OpenFreeMap.
 - 3D train: Kenney Train Kit, CC0.
-- Live data: RailRadar, RapidAPI IRCTC1, RailYatri. Unofficial. Not affiliated with Indian Railways.
+- Live data: RailRadar, RailYatri. Unofficial. Not affiliated with Indian Railways.
