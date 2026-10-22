@@ -15,3 +15,6 @@ dist/
 .turbo/
 *.log
 *.tsbuildinfo
+
+# Reference data downloads, fetched on demand
+.cache/

@@ -3,3 +3,6 @@ dist
 fixtures
 pnpm-lock.yaml
 *.md
+
+.cache/
+supabase/.temp/

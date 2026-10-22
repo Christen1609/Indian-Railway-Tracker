@@ -209,8 +209,8 @@ trains (
   name          text not null,
   origin        text references stations(code),
   destination   text references stations(code),
-  runs_on       smallint not null,    -- bitmask, Mon = 1 ... Sun = 64
-  top_speed_kmh smallint not null     -- 130 for 12951
+  runs_on       smallint,             -- bitmask, Mon = 1 ... Sun = 64. Null when unknown
+  top_speed_kmh smallint              -- 130 for 12951. Null when unknown
 )
 
 timetable_stops (

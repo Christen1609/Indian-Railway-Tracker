@@ -72,6 +72,8 @@ pnpm test             # all tests
 pnpm lint             # ESLint + Prettier check
 pnpm typecheck        # tsc across the workspace
 pnpm format           # Prettier write
+
+pnpm --filter @train-tracker/refdata load   # stations, trains and the 12951 timetable into Supabase
 ```
 
 Not built yet. Add each one here as it lands:

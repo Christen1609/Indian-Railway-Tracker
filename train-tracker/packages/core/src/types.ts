@@ -22,8 +22,8 @@ export type Station = {
   code: string;
   name: string;
   nameHi: string | null;
-  lat: number;
-  lon: number;
+  lat: number | null;
+  lon: number | null;
   zone: string | null;
 };
 
@@ -32,8 +32,8 @@ export type Train = {
   name: string;
   origin: string;
   destination: string;
-  runsOn: number;
-  topSpeedKmh: number;
+  runsOn: number | null;
+  topSpeedKmh: number | null;
 };
 
 export type TimetableStop = {
