@@ -125,13 +125,13 @@ After each trip, the fastest pace actually seen on a section is kept in `section
 
 | Section | km | Timetabled | Avg speed | Cap | Max speed-up |
 |---------|----|-----------|-----------|-----|--------------|
-| MMCT → BVI | 30 | 20 min | 90 km/h | 0.880 | 14% |
-| BVI → ST | 233 | 141 min | 99 km/h | 0.868 | 15% |
-| ST → BRC | 129 | 78 min | 99 km/h | 0.868 | 15% |
-| BRC → RTM | 261 | 189 min | 83 km/h | 0.890 | 12% |
-| RTM → NAD | 42 | 40 min | 63 km/h | 0.916 | 9% |
-| NAD → KOTA | 225 | 125 min | 108 km/h | 0.856 | 17% |
-| KOTA → NDLS | 464 | 312 min | 89 km/h | 0.881 | 14% |
+| MMCT → BVI | 30.0 | 20 min | 90 km/h | 0.880 | 14% |
+| BVI → ST | 233.6 | 141 min | 99 km/h | 0.867 | 15% |
+| ST → BRC | 129.6 | 78 min | 100 km/h | 0.867 | 15% |
+| BRC → RTM | 260.4 | 189 min | 83 km/h | 0.890 | 12% |
+| RTM → NAD | 43.8 | 40 min | 66 km/h | 0.912 | 10% |
+| NAD → KOTA | 225.4 | 125 min | 108 km/h | 0.856 | 17% |
+| KOTA → NDLS | 465.6 | 312 min | 90 km/h | 0.881 | 14% |
 
 ### Arrival window
 
@@ -218,7 +218,7 @@ timetable_stops (
   station_code text references stations(code),
   sched_arr    smallint,              -- minutes after 00:00 IST on day 1, null at origin
   sched_dep    smallint,              -- null at destination
-  km           integer not null,
+  km           real not null,
   primary key (train_number, seq)
 )
 

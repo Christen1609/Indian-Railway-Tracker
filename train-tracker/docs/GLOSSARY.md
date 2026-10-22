@@ -14,7 +14,7 @@ Use these words, spelled this way, in code, comments and UI. If a new term comes
 | Section | The track between two consecutive stops. | `sectionIndex` |
 | Halt | Timetabled minutes between arrival and departure at a stop. | `haltMin` |
 | Day offset | Which day of the journey a timetable time falls on. Origin is day 1. | `day` |
-| Km | Distance from origin along the route, from the timetable. | `km` |
+| Km | Distance from origin along the route, from the timetable. One decimal place, as the source gives it. | `km` |
 | Top speed | Fastest the train may run, per train. 130 km/h for 12951. | `topSpeedKmh` |
 | Spare time | Minutes the timetable adds for track work: 8 per 100 km on fast sections. Officially the engineering time allowance. A train running "fast" is often using this up. | `spareMin` |
 | IST | India Standard Time, UTC+05:30. Display only. Store UTC. | |
