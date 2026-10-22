@@ -1,0 +1,11 @@
+{
+  "name": "@train-tracker/ingest",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@train-tracker/core": "workspace:*"
+  }
+}

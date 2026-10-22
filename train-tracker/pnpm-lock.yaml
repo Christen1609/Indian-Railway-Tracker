@@ -185,7 +185,17 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5))
 
-  packages/core: {}
+  apps/ingest:
+    dependencies:
+      '@train-tracker/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
+  packages/core:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/refdata:
     dependencies:
