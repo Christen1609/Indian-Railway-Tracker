@@ -5,9 +5,13 @@
   "type": "module",
   "exports": {
     "./types": "./src/types.ts",
-    "./time": "./src/time.ts"
+    "./time": "./src/time.ts",
+    "./sources/railradar": "./src/sources/railradar.ts"
   },
   "scripts": {
     "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
   }
 }
