@@ -18,3 +18,6 @@ dist/
 
 # Reference data downloads, fetched on demand
 .cache/
+
+# Local-only notes holding live secrets. Never committed.
+*.local.md
