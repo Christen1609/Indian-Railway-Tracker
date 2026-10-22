@@ -156,7 +156,7 @@ Fill this in once you hit one. Likely candidate: journey dates and time zones on
 
 | What | Number |
 |------|--------|
-| 12951 route | Mumbai Central to New Delhi, 1,384 km, 15 h 32 min, 7 sections |
+| 12951 route | Mumbai Central to New Delhi, 1,388.4 km, 15 h 32 min, 7 sections |
 | Top speed | 130 km/h (160 km/h upgrade not approved yet) |
 | Spare time | 8 min per 100 km |
 | Caps on 12951 | 9% to 17% faster |
