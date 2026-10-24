@@ -223,9 +223,13 @@ Reject the event and log the reason when any of these is true. Rejected events n
 | A report says the train already arrived or left, but `at` is more than 1 min after `fetchedAt`. Also catches a parser that forgot the IST offset. | `future_time` |
 | `at` is more than 30 min before timetabled origin departure. | `before_start` |
 | `DEP` at a station is earlier than `ARR` at the same station. | `dep_before_arr` |
-| The event puts the train behind a station already confirmed with high confidence. | `backwards` |
+| The event is at an earlier station than one already confirmed with high confidence, **and is timed after that confirmation**. | `backwards` |
 | The event implies the train ran faster than its top speed since the last confirmed event. | `too_fast` |
 | The response failed its zod schema. | `bad_format` |
+
+The `backwards` rule needs the timing clause because RailRadar returns all 222 route entries on every call, so every check re-reports every past halt. Without it, once NDLS is confirmed, a re-reported arrival at BVI counts as behind and almost nothing survives. Being at an earlier station is only impossible when the report is also *later* than a confirmation further down the route. This agrees with Step 6: a source reporting an earlier station is behind, not wrong.
+
+`too_fast` measures from the latest confirmed event at any confidence, not only high. `bad_format` covers an event whose own `at` or `fetchedAt` is not a usable UTC instant, which also catches a parser that emitted a naive timestamp; a response that fails its schema never becomes an event at all, so the parser reports that one.
 
 ### Step 3. Group
 
