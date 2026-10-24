@@ -190,6 +190,9 @@ importers:
       '@train-tracker/core':
         specifier: workspace:*
         version: link:../../packages/core
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/core:
     dependencies:
