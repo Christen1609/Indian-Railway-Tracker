@@ -6,7 +6,8 @@
   "exports": {
     "./types": "./src/types.ts",
     "./time": "./src/time.ts",
-    "./sources/railradar": "./src/sources/railradar.ts"
+    "./sources/railradar": "./src/sources/railradar.ts",
+    "./fusion/normalize": "./src/fusion/normalize.ts"
   },
   "scripts": {
     "typecheck": "tsc --build"
