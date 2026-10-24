@@ -20,7 +20,15 @@ RailRadar endpoints we use:
 - `GET /v1/trains/{number}`: timetable.
 - `GET /v1/trains/{number}/route`: route geometry as GeoJSON.
 
-The docs only show part of the live response. Save a real response as a fixture before writing the parser. Check one thing on that first response: does it include actual times for past stops, or only the latest one? If past stops are included, a missed check costs nothing.
+The docs only show part of the live response. Save a real response as a fixture before writing the parser.
+
+What the first two real responses showed, 22 Oct 2026:
+
+- **Actual times come back for every past stop, not just the latest.** All 8 halts carry their own `actualArrival` and `actualDeparture` in one call, so a missed check costs nothing. The route holds 222 entries and `isHalt` flags the 8 commercial halts.
+- **`provenance` says whether a time is real.** `observed` on a stop the train has passed, `predicted` on one it has not, and absent on the 214 non-halt entries. Only `observed` may become an event. A completed journey reads `observed` throughout and a journey that has not started reads `predicted` throughout, so both states need a fixture.
+- **Per-stop `distance` is in the payload**, to one decimal, which is where `timetable_stops.km` now comes from.
+- **The live endpoint takes no journey date.** `GET /v1/trains/{number}/live` returns the current or most recent run and names it in `startDate`. There is no way to ask for a specific past date.
+- **Station codes do not always match the reference data.** RailRadar calls Mumbai Central `MMCT`; datameet and our `stations` table call it `BCT`. Each adapter maps its own source's codes to ours.
 
 ### Getting keys
 
@@ -135,8 +143,10 @@ One demo costs about 6 RailRadar calls: preflight 1, picker 1, catch-up 1, about
 
 Every source is one adapter. Fetching and parsing are separate, so the raw response is saved before anything can fail.
 
+`SourceId` and `RawFetch` live in `packages/core/src/types.ts`, not with the adapters, because core is not allowed to import from an app.
+
 ```ts
-// apps/ingest/src/adapters/types.ts
+// packages/core/src/types.ts
 
 export type SourceId = 'railradar' | 'railyatri_scrape';
 
@@ -159,17 +169,22 @@ export type RawFetch = {
 };
 ```
 
+`SourceAdapter` is the shape to converge on once there is more than one adapter to hold to it. Today RailRadar is a plain exported function, `fetchRailRadarLive(trainNumber, apiKey)`, with no `journeyDate` because the endpoint does not take one, and no `costPerCall` because nothing reads it until the quota guard exists.
+
 Parsers live in `packages/core`, are pure, and are tested against saved real responses in `fixtures/<source>/`. Fixtures exist only so tests don't burn real quota. The app never loads them.
 
 ```ts
 // packages/core/src/sources/railradar.ts (one file per source: schema and parser)
 
-/** Turns one raw response into source events. Pure. Invalid input returns errors, never throws. */
-export function parseRailRadar(raw: RawFetch, ctx: ParseContext): ParseResult;
+/** Events from one RailRadar live response, with every problem found */
+export function parseRailRadarLive(raw: RawFetch, rawFetchId: string): ParseResult;
+
+/** Canonical station code for a RailRadar one */
+export function canonicalStationCode(code: string): string;
 
 export type ParseResult = {
   events: SourceEvent[];
-  errors: ParseError[];  // fields we could not read, kept for debugging
+  errors: string[];      // what we could not read, kept for debugging
 };
 
 export type SourceEvent = {
