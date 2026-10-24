@@ -1,4 +1,4 @@
-// Features: source timestamps to UTC, IST dates, timetable minutes, day offset, IST clock
+// Features: source timestamps to UTC, IST dates, timetable minutes, elapsed minutes, day offset, IST clock
 
 import { assert } from './types.js';
 import type { IsoDate, IsoUtc } from './types.js';
@@ -53,6 +53,15 @@ export function utcToTimetableMinute(journeyDate: IsoDate, at: IsoUtc): number {
   const ms = Date.parse(at);
   assert(!Number.isNaN(ms), `a UTC timestamp, got ${at}`);
   return Math.round((ms - midnight) / MS_PER_MINUTE);
+}
+
+/** Whole minutes from one UTC instant to another, negative when it runs backwards */
+export function minutesBetween(from: IsoUtc, to: IsoUtc): number {
+  const fromMs = Date.parse(from);
+  const toMs = Date.parse(to);
+  assert(!Number.isNaN(fromMs), `a UTC timestamp, got ${from}`);
+  assert(!Number.isNaN(toMs), `a UTC timestamp, got ${to}`);
+  return Math.round((toMs - fromMs) / MS_PER_MINUTE);
 }
 
 /** Which journey day a timetable minute falls on, origin being day 1 */
