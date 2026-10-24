@@ -6,6 +6,7 @@
     "typecheck": "tsc --build"
   },
   "dependencies": {
-    "@train-tracker/core": "workspace:*"
+    "@train-tracker/core": "workspace:*",
+    "zod": "4.6.7"
   }
 }
