@@ -2,10 +2,10 @@
 
 import { z } from 'zod';
 import type { RawFetch } from '@train-tracker/core/types';
+import { writeRows } from './rest.js';
+import type { DbConfig } from './rest.js';
 
 const Inserted = z.array(z.object({ id: z.string().min(1) }));
-
-export type DbConfig = { url: string; serviceRoleKey: string };
 
 export type RawFetchRow = {
   journey_id: string | null;
@@ -34,24 +34,8 @@ export function rawFetchRow(raw: RawFetch, journeyId: string | null): RawFetchRo
 
 /** Saves one row and returns the id that source events will point at */
 export async function insertRawFetch(row: RawFetchRow, config: DbConfig): Promise<string> {
-  const response = await fetch(`${config.url}/rest/v1/raw_fetches?select=id`, {
-    method: 'POST',
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    },
-    body: JSON.stringify(row),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Insert into raw_fetches failed. Status ${response.status}. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.`,
-    );
-  }
-
-  const inserted = Inserted.safeParse(await response.json());
+  // rows, from writeRows
+  const inserted = Inserted.safeParse(await writeRows('raw_fetches?select=id', row, config));
   const first = inserted.success ? inserted.data[0] : undefined;
   if (first === undefined) {
     throw new Error('Insert into raw_fetches returned no id. Check the Prefer header and RLS.');
