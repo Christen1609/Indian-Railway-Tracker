@@ -1,10 +1,12 @@
 // Features: the watch list, the budget gate, one pass over the list, the wait between passes
 
+import { sourceUsable } from '@train-tracker/core/schedule/health';
 import { quotaCheck } from '@train-tracker/core/schedule/quota';
 import type { IsoUtc, SourceId } from '@train-tracker/core/types';
 import { readConfig } from './config.js';
 import type { Config } from './config.js';
 import { callsThisMonth, latestJourneyFor, stateFor } from './db/journey-data.js';
+import { healthFor } from './db/source-health.js';
 import { log } from './log.js';
 import { checkJourney } from './scheduler/check-journey.js';
 
@@ -61,6 +63,19 @@ async function pass(trainNumber: string, run: Run): Promise<IsoUtc | null> {
     return due;
   }
 
+  const health = await healthFor(RAILRADAR, run.config.db); // how the source is behaving, from healthFor
+  const usable = sourceUsable(health, now); // whether it may be called, from sourceUsable
+
+  if (!usable.usable) {
+    log('warn', usable.reason, {
+      source: RAILRADAR,
+      trainNumber,
+      failures: health.failures,
+      readyAt: usable.readyAt,
+    });
+    return usable.readyAt;
+  }
+
   const spentThisMonth = await callsThisMonth(RAILRADAR, now, run.config.db); // calls so far, from callsThisMonth
   // whether the budget allows this call, from quotaCheck
   const budget = quotaCheck({
@@ -87,6 +102,7 @@ async function pass(trainNumber: string, run: Run): Promise<IsoUtc | null> {
   const outcome = await checkJourney({
     trainNumber,
     config: run.config,
+    health,
     watchingSince: run.watchingSince,
     now,
   });

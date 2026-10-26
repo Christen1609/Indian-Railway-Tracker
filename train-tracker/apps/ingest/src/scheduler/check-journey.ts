@@ -1,6 +1,8 @@
 // Features: one check of one journey, from the fetch to the state the browser reads
 
 import { estimate } from '@train-tracker/core/estimate';
+import { afterFailure, afterSuccess, callVerdict } from '@train-tracker/core/schedule/health';
+import type { SourceHealth } from '@train-tracker/core/schedule/health';
 import { normalizeEvents } from '@train-tracker/core/fusion/normalize';
 import { resolveEvents } from '@train-tracker/core/fusion/resolve';
 import { nextCheck } from '@train-tracker/core/schedule/next-check';
@@ -17,15 +19,18 @@ import {
   topSpeedFor,
 } from '../db/journey-data.js';
 import { insertRawFetch, rawFetchRow } from '../db/raw-fetches.js';
+import { saveHealth } from '../db/source-health.js';
 import { log } from '../log.js';
 import type { Config } from '../config.js';
 
-const ASKED: SourceId[] = ['railradar'];
+const RAILRADAR: SourceId = 'railradar';
+const ASKED: SourceId[] = [RAILRADAR];
 const NO_JOURNEY = null;
 
 export type CheckInput = {
   trainNumber: string;
   config: Config;
+  health: SourceHealth;
   watchingSince: IsoUtc;
   now: IsoUtc;
 };
@@ -45,10 +50,23 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
   const probe = parseRailRadarLive(raw, ''); // events, from parseRailRadarLive
   const journeyDate = probe.events[0]?.journeyDate;
 
+  // whether this call counts against the source, from callVerdict
+  const verdict = callVerdict({
+    status: raw.status,
+    hasError: raw.error !== undefined,
+    parseErrors: probe.errors.length,
+  });
+  await saveHealth(
+    RAILRADAR,
+    verdict.failed ? afterFailure(input.health, now, verdict.isRateLimited) : afterSuccess(),
+    now,
+    config.db,
+  );
+
   if (journeyDate === undefined) {
     await insertRawFetch(rawFetchRow(raw, NO_JOURNEY), config.db);
     log('warn', 'check_gave_nothing', {
-      source: 'railradar',
+      source: RAILRADAR,
       trainNumber,
       status: raw.status,
       error: raw.error,
@@ -107,7 +125,8 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
 
   const rejected = normalized.filter((event) => event.rejected !== undefined).length;
   log('info', 'checked', {
-    source: 'railradar',
+    source: RAILRADAR,
+    failed: verdict.failed,
     trainNumber,
     journeyDate,
     status: raw.status,

@@ -35,6 +35,10 @@
     "./schedule/quota": {
       "types": "./dist/schedule/quota.d.ts",
       "import": "./dist/schedule/quota.js"
+    },
+    "./schedule/health": {
+      "types": "./dist/schedule/health.d.ts",
+      "import": "./dist/schedule/health.js"
     }
   },
   "scripts": {
