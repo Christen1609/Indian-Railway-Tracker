@@ -14,7 +14,8 @@ import type {
   TrainState,
   TrainStateKind,
 } from '@train-tracker/core/types';
-import { readRows, writeRows } from './rest.js';
+import { istMonthStart } from '@train-tracker/core/time';
+import { countRows, readRows, writeRows } from './rest.js';
 import type { DbConfig } from './rest.js';
 
 const JourneyRows = z.array(z.object({ id: z.string().min(1), is_scored: z.boolean() }));
@@ -75,6 +76,16 @@ export async function journeyFor(
   const row = started[0];
   assert(row !== undefined, 'a journey row back from starting a journey');
   return { id: row.id, isScored: row.is_scored };
+}
+
+/** How many calls one source has cost since the IST month began */
+export async function callsThisMonth(
+  source: SourceId,
+  now: IsoUtc,
+  config: DbConfig,
+): Promise<number> {
+  const since = istMonthStart(now); // the start of the IST month, from istMonthStart
+  return countRows(`raw_fetches?source=eq.${source}&fetched_at=gte.${since}`, config); // the count, from countRows
 }
 
 /** The newest journey we hold for one train, or null when we hold none */
