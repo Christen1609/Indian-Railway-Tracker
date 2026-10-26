@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --build"
+    "typecheck": "tsc --build",
+    "start": "tsc --build && node --env-file=../../.env dist/main.js"
   },
   "dependencies": {
     "@train-tracker/core": "workspace:*",

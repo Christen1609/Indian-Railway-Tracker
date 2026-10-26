@@ -1,0 +1,212 @@
+// Features: the journey row, the timetable, train facts, confirmed events, saving events and state
+
+import { z } from 'zod';
+import { assert } from '@train-tracker/core/types';
+import type {
+  Confidence,
+  EventType,
+  IsoDate,
+  IsoUtc,
+  ResolvedEvent,
+  SourceEvent,
+  SourceId,
+  TimetableStop,
+  TrainState,
+  TrainStateKind,
+} from '@train-tracker/core/types';
+import { readRows, writeRows } from './rest.js';
+import type { DbConfig } from './rest.js';
+
+const JourneyRows = z.array(z.object({ id: z.string().min(1), is_scored: z.boolean() }));
+
+const StopRows = z.array(
+  z.object({
+    seq: z.number().int(),
+    station_code: z.string().min(1),
+    sched_arr: z.number().int().nullable(),
+    sched_dep: z.number().int().nullable(),
+    km: z.number(),
+  }),
+);
+
+const TrainRows = z.array(z.object({ top_speed_kmh: z.number().int().nullable() }));
+
+const ResolvedRows = z.array(
+  z.object({
+    station_code: z.string().min(1),
+    type: z.string().min(1),
+    at: z.string().min(1),
+    confidence_score: z.number(),
+    confidence: z.string().min(1),
+    chosen_source: z.string().min(1),
+    sources: z.array(z.string().min(1)),
+    resolved_at: z.string().min(1),
+  }),
+);
+
+const StateRows = z.array(
+  z.object({ next_check_at: z.string().nullable(), updated_at: z.string().min(1) }),
+);
+
+export type JourneyRef = { id: string; isScored: boolean };
+
+export type StateMemory = { nextCheckAt: IsoUtc | null; updatedAt: IsoUtc };
+
+/** The journey for one train on one date, started if this is the first we have seen of it */
+export async function journeyFor(
+  trainNumber: string,
+  journeyDate: IsoDate,
+  config: DbConfig,
+): Promise<JourneyRef> {
+  const query = `journeys?train_number=eq.${trainNumber}&journey_date=eq.${journeyDate}&select=id,is_scored`;
+  const found = JourneyRows.parse(await readRows(query, config)); // rows, from readRows
+  const held = found[0];
+  if (held !== undefined) {
+    return { id: held.id, isScored: held.is_scored };
+  }
+
+  const started = JourneyRows.parse(
+    await writeRows(
+      'journeys?select=id,is_scored',
+      { train_number: trainNumber, journey_date: journeyDate, status: 'scheduled' },
+      config,
+    ),
+  ); // rows, from writeRows
+  const row = started[0];
+  assert(row !== undefined, 'a journey row back from starting a journey');
+  return { id: row.id, isScored: row.is_scored };
+}
+
+/** The newest journey we hold for one train, or null when we hold none */
+export async function latestJourneyFor(
+  trainNumber: string,
+  config: DbConfig,
+): Promise<JourneyRef | null> {
+  const query = `journeys?train_number=eq.${trainNumber}&select=id,is_scored&order=journey_date.desc&limit=1`;
+  const rows = JourneyRows.parse(await readRows(query, config)); // rows, from readRows
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, isScored: row.is_scored };
+}
+
+/** The stops of one train in route order, as the estimator wants them */
+export async function timetableFor(
+  trainNumber: string,
+  config: DbConfig,
+): Promise<TimetableStop[]> {
+  const query = `timetable_stops?train_number=eq.${trainNumber}&select=seq,station_code,sched_arr,sched_dep,km&order=seq.asc`;
+  const rows = StopRows.parse(await readRows(query, config)); // rows, from readRows
+  return rows.map((row) => ({
+    trainNumber,
+    seq: row.seq,
+    stationCode: row.station_code,
+    schedArrMin: row.sched_arr,
+    schedDepMin: row.sched_dep,
+    km: row.km,
+  }));
+}
+
+/** The top speed we hold for a train, null when the reference data does not say */
+export async function topSpeedFor(trainNumber: string, config: DbConfig): Promise<number | null> {
+  const query = `trains?number=eq.${trainNumber}&select=top_speed_kmh`;
+  const rows = TrainRows.parse(await readRows(query, config)); // rows, from readRows
+  return rows[0]?.top_speed_kmh ?? null;
+}
+
+/** Every confirmed event of one journey */
+export async function resolvedFor(journeyId: string, config: DbConfig): Promise<ResolvedEvent[]> {
+  const query = `resolved_events?journey_id=eq.${journeyId}&select=station_code,type,at,confidence_score,confidence,chosen_source,sources,resolved_at`;
+  const rows = ResolvedRows.parse(await readRows(query, config)); // rows, from readRows
+  return rows.map((row) => ({
+    journeyId,
+    stationCode: row.station_code,
+    type: row.type as EventType,
+    at: row.at,
+    confidenceScore: row.confidence_score,
+    confidence: row.confidence as Confidence,
+    chosenSource: row.chosen_source as SourceId,
+    sources: row.sources as SourceId[],
+    resolvedAt: row.resolved_at,
+  }));
+}
+
+/** What we last wrote about a journey, or null when we have never written any */
+export async function stateFor(journeyId: string, config: DbConfig): Promise<StateMemory | null> {
+  const query = `train_state?journey_id=eq.${journeyId}&select=next_check_at,updated_at`;
+  const rows = StateRows.parse(await readRows(query, config)); // rows, from readRows
+  const row = rows[0];
+  return row === undefined ? null : { nextCheckAt: row.next_check_at, updatedAt: row.updated_at };
+}
+
+/** Saves what the sources said about one journey, rejections kept and labelled */
+export async function saveSourceEvents(
+  events: readonly SourceEvent[],
+  journeyId: string,
+  config: DbConfig,
+): Promise<void> {
+  if (events.length === 0) {
+    return;
+  }
+  await writeRows(
+    'source_events?select=id',
+    events.map((event) => ({
+      journey_id: journeyId,
+      source: event.source,
+      station_code: event.stationCode,
+      type: event.type,
+      at: event.at,
+      fetched_at: event.fetchedAt,
+      raw_fetch_id: event.rawFetchId,
+      rejected: event.rejected ?? null,
+    })),
+    config,
+  );
+}
+
+/** Replaces the confirmed events of one journey with the ones just resolved */
+export async function saveResolvedEvents(
+  events: readonly ResolvedEvent[],
+  config: DbConfig,
+): Promise<void> {
+  if (events.length === 0) {
+    return;
+  }
+  await writeRows(
+    'resolved_events?select=journey_id',
+    events.map((event) => ({
+      journey_id: event.journeyId,
+      station_code: event.stationCode,
+      type: event.type,
+      at: event.at,
+      confidence_score: event.confidenceScore,
+      confidence: event.confidence,
+      chosen_source: event.chosenSource,
+      sources: event.sources,
+      resolved_at: event.resolvedAt,
+    })),
+    config,
+    'journey_id,station_code,type',
+  );
+}
+
+/** Writes the one row the browser reads, which Realtime then pushes */
+export async function saveTrainState(state: TrainState, config: DbConfig): Promise<void> {
+  await writeRows(
+    'train_state?select=journey_id',
+    {
+      journey_id: state.journeyId,
+      state: state.state satisfies TrainStateKind,
+      km: state.km,
+      lo_km: state.loKm,
+      hi_km: state.hiKm,
+      pace: state.pace,
+      delay_min: state.delayMin,
+      next_station: state.nextStation,
+      window_start: state.window?.windowStart ?? null,
+      window_end: state.window?.windowEnd ?? null,
+      next_check_at: state.nextCheckAt,
+      updated_at: state.updatedAt,
+    },
+    config,
+    'journey_id',
+  );
+}
