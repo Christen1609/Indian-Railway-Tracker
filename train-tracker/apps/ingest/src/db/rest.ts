@@ -4,6 +4,7 @@ import { assert } from '@train-tracker/core/types';
 
 const MERGE_DUPLICATES = 'resolution=merge-duplicates';
 const REPRESENTATION = 'return=representation';
+const FILTERED = '=eq.';
 
 export type DbConfig = { url: string; serviceRoleKey: string };
 
@@ -50,6 +51,35 @@ export async function countRows(path: string, config: DbConfig): Promise<number>
     `a row count in the content-range header, got ${range}`,
   );
   return Number(total);
+}
+
+/** Changes the rows a query matches, which must be filtered */
+export async function patchRows(path: string, changes: unknown, config: DbConfig): Promise<void> {
+  assert(path.includes(FILTERED), `a filtered patch, got ${path}`);
+  // the service role headers, from serviceHeaders
+  const response = await fetch(`${config.url}/rest/v1/${path}`, {
+    method: 'PATCH',
+    headers: serviceHeaders(config),
+    body: JSON.stringify(changes),
+  });
+  if (!response.ok) {
+    throw new Error(`Patch of ${path} failed. Status ${response.status}. ${await response.text()}`);
+  }
+}
+
+/** Deletes the rows a query matches, which must be filtered */
+export async function deleteRows(path: string, config: DbConfig): Promise<void> {
+  assert(path.includes(FILTERED), `a filtered delete, got ${path}`);
+  // the service role headers, from serviceHeaders
+  const response = await fetch(`${config.url}/rest/v1/${path}`, {
+    method: 'DELETE',
+    headers: serviceHeaders(config),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Delete from ${path} failed. Status ${response.status}. ${await response.text()}`,
+    );
+  }
 }
 
 /** Writes rows, merging onto the given conflict target when one is named */
