@@ -1,4 +1,4 @@
-// Features: source timestamps to UTC, IST dates, timetable minutes, elapsed minutes, day offset, IST clock
+// Features: source timestamps to UTC, IST dates, month progress, timetable minutes, elapsed minutes, day offset, IST clock
 
 import { assert } from './types.js';
 import type { IsoDate, IsoUtc } from './types.js';
@@ -39,6 +39,22 @@ export function istDateOf(at: IsoUtc): IsoDate {
   const ms = Date.parse(at);
   assert(!Number.isNaN(ms), `a UTC timestamp, got ${at}`);
   return new Date(ms + IST_OFFSET_MIN * MS_PER_MINUTE).toISOString().slice(0, 10);
+}
+
+/** How far through its month an IST date is: the day it falls on, and the days that month has */
+export function istMonthProgress(at: IsoUtc): { day: number; days: number } {
+  const date = istDateOf(at); // the IST calendar date, from istDateOf
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  return { day: Number(date.slice(8, 10)), days: new Date(Date.UTC(year, month, 0)).getUTCDate() };
+}
+
+/** The UTC instant the IST month of a date began */
+export function istMonthStart(at: IsoUtc): IsoUtc {
+  const date = istDateOf(at); // the IST calendar date, from istDateOf
+  const ms = Date.parse(`${date.slice(0, 7)}-01T00:00:00+05:30`);
+  assert(!Number.isNaN(ms), `a UTC timestamp, got ${at}`);
+  return new Date(ms).toISOString();
 }
 
 /** Timetable minute to the UTC instant it falls on */

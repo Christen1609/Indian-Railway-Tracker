@@ -1,5 +1,7 @@
 // Features: the service role headers, reading rows, writing rows
 
+import { assert } from '@train-tracker/core/types';
+
 const MERGE_DUPLICATES = 'resolution=merge-duplicates';
 const REPRESENTATION = 'return=representation';
 
@@ -27,6 +29,27 @@ export async function readRows(path: string, config: DbConfig): Promise<unknown>
     );
   }
   return response.json();
+}
+
+/** How many rows a query matches, without fetching any of them */
+export async function countRows(path: string, config: DbConfig): Promise<number> {
+  // the service role headers, from serviceHeaders
+  const response = await fetch(`${config.url}/rest/v1/${path}`, {
+    method: 'HEAD',
+    headers: serviceHeaders(config, 'count=exact'),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Count of ${path} failed. Status ${response.status}. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.`,
+    );
+  }
+  const range = response.headers.get('content-range');
+  const total = range?.split('/')[1];
+  assert(
+    total !== undefined && total !== '*',
+    `a row count in the content-range header, got ${range}`,
+  );
+  return Number(total);
 }
 
 /** Writes rows, merging onto the given conflict target when one is named */

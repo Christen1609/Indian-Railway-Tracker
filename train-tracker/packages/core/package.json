@@ -31,6 +31,10 @@
     "./schedule/next-check": {
       "types": "./dist/schedule/next-check.d.ts",
       "import": "./dist/schedule/next-check.js"
+    },
+    "./schedule/quota": {
+      "types": "./dist/schedule/quota.d.ts",
+      "import": "./dist/schedule/quota.js"
     }
   },
   "scripts": {
