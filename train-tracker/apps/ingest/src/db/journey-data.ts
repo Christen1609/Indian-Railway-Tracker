@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { assert } from '@train-tracker/core/types';
 import type {
   Confidence,
+  Estimate,
   EventType,
   IsoDate,
   IsoUtc,
@@ -14,6 +15,7 @@ import type {
   TrainState,
   TrainStateKind,
 } from '@train-tracker/core/types';
+import type { LoggedWindow, WindowHit } from '@train-tracker/core/accuracy/score';
 import { istMonthStart } from '@train-tracker/core/time';
 import { countRows, deleteRows, patchRows, readRows, writeRows } from './rest.js';
 import type { DbConfig } from './rest.js';
@@ -47,6 +49,14 @@ const ResolvedRows = z.array(
 
 const StateRows = z.array(
   z.object({ next_check_at: z.string().nullable(), updated_at: z.string().min(1) }),
+);
+
+const LoggedRows = z.array(
+  z.object({
+    at: z.string().min(1),
+    window_start: z.string().min(1),
+    window_end: z.string().min(1),
+  }),
 );
 
 const UncleanedRows = z.array(
@@ -100,9 +110,9 @@ export async function uncleanedJourneys(config: DbConfig): Promise<UncleanedJour
   }));
 }
 
-/** Whether a journey has been scored, which is what guards its confirmed events */
+/** Whether a journey has been graded, which is what guards its confirmed events */
 export async function hasScores(journeyId: string, config: DbConfig): Promise<boolean> {
-  const counted = await countRows(`journey_scores?journey_id=eq.${journeyId}`, config); // the count, from countRows
+  const counted = await countRows(`window_hits?journey_id=eq.${journeyId}`, config); // the count, from countRows
   return counted > 0;
 }
 
@@ -113,7 +123,7 @@ export async function deleteRawFor(journeyId: string, config: DbConfig): Promise
 
 /** Deletes everything we worked out about one journey, once its scores are safe */
 export async function deleteDerivedFor(journeyId: string, config: DbConfig): Promise<void> {
-  for (const table of ['source_events', 'resolved_events', 'train_state']) {
+  for (const table of ['source_events', 'resolved_events', 'estimate_log', 'train_state']) {
     await deleteRows(`${table}?journey_id=eq.${journeyId}`, config);
   }
 }
@@ -121,6 +131,72 @@ export async function deleteDerivedFor(journeyId: string, config: DbConfig): Pro
 /** Marks a journey as arrived and swept, so the sweep never looks at it again */
 export async function markCleaned(journeyId: string, at: IsoUtc, config: DbConfig): Promise<void> {
   await patchRows(`journeys?id=eq.${journeyId}`, { status: 'arrived', cleaned_at: at }, config);
+}
+
+/** Records the estimate we are showing now, so it can be graded once the train arrives */
+export async function saveEstimate(
+  journeyId: string,
+  estimate: Estimate,
+  at: IsoUtc,
+  config: DbConfig,
+): Promise<void> {
+  await writeRows(
+    'estimate_log?select=journey_id',
+    {
+      journey_id: journeyId,
+      at,
+      km: estimate.km,
+      lo_km: estimate.loKm,
+      hi_km: estimate.hiKm,
+      next_station: estimate.nextStation,
+      window_start: estimate.window?.windowStart ?? null,
+      window_end: estimate.window?.windowEnd ?? null,
+    },
+    config,
+    'journey_id,at',
+  );
+}
+
+/** Every window we showed for one stop, oldest first */
+export async function loggedWindowsFor(
+  journeyId: string,
+  stationCode: string,
+  config: DbConfig,
+): Promise<LoggedWindow[]> {
+  const query = `estimate_log?journey_id=eq.${journeyId}&next_station=eq.${stationCode}&window_start=not.is.null&select=at,window_start,window_end&order=at.asc`;
+  const rows = LoggedRows.parse(await readRows(query, config)); // rows, from readRows
+  return rows.map((row) => ({
+    at: row.at,
+    windowStart: row.window_start,
+    windowEnd: row.window_end,
+  }));
+}
+
+/** Records how each window we showed compares with the arrival that followed */
+export async function saveWindowHits(
+  journeyId: string,
+  hits: readonly WindowHit[],
+  config: DbConfig,
+): Promise<void> {
+  if (hits.length === 0) {
+    return;
+  }
+  await writeRows(
+    'window_hits?select=journey_id',
+    hits.map((one) => ({
+      journey_id: journeyId,
+      station_code: one.stationCode,
+      published_at: one.publishedAt,
+      arrived_at: one.arrivedAt,
+      window_start: one.windowStart,
+      window_end: one.windowEnd,
+      hit: one.hit,
+      width_min: one.widthMin,
+      lead_min: one.leadMin,
+    })),
+    config,
+    'journey_id,station_code,published_at',
+  );
 }
 
 /** How many calls one source has cost since the IST month began */

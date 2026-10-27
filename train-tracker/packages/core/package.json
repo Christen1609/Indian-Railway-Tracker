@@ -43,6 +43,10 @@
     "./schedule/retention": {
       "types": "./dist/schedule/retention.d.ts",
       "import": "./dist/schedule/retention.js"
+    },
+    "./accuracy/score": {
+      "types": "./dist/accuracy/score.d.ts",
+      "import": "./dist/accuracy/score.js"
     }
   },
   "scripts": {
