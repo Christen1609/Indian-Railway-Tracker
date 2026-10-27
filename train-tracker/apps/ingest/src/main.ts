@@ -12,12 +12,10 @@ import { checkJourney } from './scheduler/check-journey.js';
 
 const RAILRADAR: SourceId = 'railradar';
 const TRAIN_NUMBER = /^\d{4,5}$/;
-const DEMO_FLAG = '--demo';
 const WAIT_FLOOR_MS = 20_000;
 const WAIT_CEILING_MS = 300_000;
-const PACED_RETRY_MS = 3_600_000;
 
-type Run = { config: Config; watchingSince: IsoUtc; isDemo: boolean };
+type Run = { config: Config; watchingSince: IsoUtc };
 
 /** Waits a number of milliseconds */
 function wait(ms: number): Promise<void> {
@@ -78,24 +76,11 @@ async function pass(trainNumber: string, run: Run): Promise<IsoUtc | null> {
 
   const spentThisMonth = await callsThisMonth(RAILRADAR, now, run.config.db); // calls so far, from callsThisMonth
   // whether the budget allows this call, from quotaCheck
-  const budget = quotaCheck({
-    ...run.config.quota,
-    spentThisMonth,
-    isDemo: run.isDemo,
-    now,
-  });
+  const budget = quotaCheck({ ...run.config.quota, spentThisMonth });
 
   if (!budget.spend) {
-    log('warn', budget.reason, {
-      source: RAILRADAR,
-      trainNumber,
-      spentThisMonth,
-      allowance: budget.allowance,
-      left: budget.left,
-    });
-    return budget.reason === 'quota_spent'
-      ? null
-      : new Date(Date.parse(now) + PACED_RETRY_MS).toISOString();
+    log('warn', budget.reason, { source: RAILRADAR, trainNumber, spentThisMonth });
+    return null;
   }
 
   // the result of one check, from checkJourney
@@ -112,9 +97,7 @@ async function pass(trainNumber: string, run: Run): Promise<IsoUtc | null> {
 /** Watches the trains named on the command line until none of them is due again */
 async function main(): Promise<void> {
   const config = readConfig(process.env); // the validated config, from readConfig
-  const given = process.argv.slice(2);
-  const watching = given.filter((one) => TRAIN_NUMBER.test(one));
-  const isDemo = given.includes(DEMO_FLAG);
+  const watching = process.argv.slice(2).filter((one) => TRAIN_NUMBER.test(one));
 
   if (watching.length === 0) {
     throw new Error(
@@ -122,17 +105,15 @@ async function main(): Promise<void> {
     );
   }
 
-  const run: Run = { config, watchingSince: new Date().toISOString(), isDemo };
+  const run: Run = { config, watchingSince: new Date().toISOString() };
   const spentThisMonth = await callsThisMonth(RAILRADAR, run.watchingSince, config.db); // calls so far, from callsThisMonth
   // what is left to spend, from quotaCheck
-  const budget = quotaCheck({ ...config.quota, spentThisMonth, isDemo, now: run.watchingSince });
+  const budget = quotaCheck({ ...config.quota, spentThisMonth });
 
   log('info', 'worker_started', {
     watching: watching.join(','),
     supabase: config.db.url,
-    isDemo,
     spentThisMonth,
-    allowance: budget.allowance,
     left: budget.left,
   });
 
