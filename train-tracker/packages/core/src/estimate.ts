@@ -179,13 +179,13 @@ function latestOf(
   return found;
 }
 
-/** Paces of the sections the train has finished, oldest first */
-function finishedPaces(
+/** The pace of every finished section, keyed by the seq it starts from */
+function pacesBySeq(
   built: readonly Section[],
   confirmed: readonly ResolvedEvent[],
   journeyDate: IsoDate,
   seqByStation: ReadonlyMap<string, number>,
-): number[] {
+): Map<number, number> {
   const departed = new Map<number, number>();
   const arrived = new Map<number, number>();
   for (const event of confirmed) {
@@ -201,15 +201,72 @@ function finishedPaces(
     }
   }
 
-  const paces: number[] = [];
+  const paces = new Map<number, number>();
   for (const section of built) {
     const left = departed.get(section.fromSeq);
     const reached = arrived.get(section.toSeq);
     if (left !== undefined && reached !== undefined && reached > left) {
-      paces.push(sectionPace(reached - left, section.timetabledMin)); // pace, from sectionPace
+      paces.set(section.fromSeq, sectionPace(reached - left, section.timetabledMin)); // pace, from sectionPace
     }
   }
   return paces;
+}
+
+/** Paces of the sections the train has finished, oldest first */
+function finishedPaces(
+  built: readonly Section[],
+  confirmed: readonly ResolvedEvent[],
+  journeyDate: IsoDate,
+  seqByStation: ReadonlyMap<string, number>,
+): number[] {
+  // every finished section's pace, from pacesBySeq
+  const paces = pacesBySeq(built, confirmed, journeyDate, seqByStation);
+  return built.flatMap((section) => {
+    const pace = paces.get(section.fromSeq);
+    return pace === undefined ? [] : [pace];
+  });
+}
+
+/** What a journey actually ran each of its finished sections at, keyed by the seq it starts from */
+export function observedPaces(
+  stops: readonly TimetableStop[],
+  confirmed: readonly ResolvedEvent[],
+  journeyDate: IsoDate,
+): Map<number, number> {
+  const seqByStation = new Map(stops.map((stop) => [stop.stationCode, stop.seq]));
+  return pacesBySeq(sections(stops), confirmed, journeyDate, seqByStation); // paces, from pacesBySeq
+}
+
+export type SectionCapSeen = {
+  fromSeq: number;
+  fastestPace: number;
+  tripsSeen: number;
+};
+
+/**
+ * Section caps after one more journey: a section is recorded the first time it is run,
+ * its trip count goes up every time, and its cap moves only when the journey beat the
+ * fastest pace we had ever seen there. One row per section the journey actually finished.
+ */
+export function learnCaps(
+  known: readonly SectionCapSeen[],
+  observed: ReadonlyMap<number, number>,
+): SectionCapSeen[] {
+  const bySeq = new Map(known.map((cap) => [cap.fromSeq, cap]));
+  const changed: SectionCapSeen[] = [];
+  for (const [fromSeq, pace] of observed) {
+    const cap = bySeq.get(fromSeq);
+    if (cap === undefined) {
+      changed.push({ fromSeq, fastestPace: pace, tripsSeen: 1 });
+      continue;
+    }
+    changed.push({
+      fromSeq,
+      fastestPace: Math.min(cap.fastestPace, pace),
+      tripsSeen: cap.tripsSeen + 1,
+    });
+  }
+  return changed;
 }
 
 /** Where the train is, how late it is, and when it may reach the next stop */

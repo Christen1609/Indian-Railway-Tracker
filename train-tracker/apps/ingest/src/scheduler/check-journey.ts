@@ -15,6 +15,7 @@ import {
   loggedWindowsFor,
   saveEstimate,
   saveWindowHits,
+  sectionCapsFor,
   resolvedFor,
   saveResolvedEvents,
   saveSourceEvents,
@@ -105,17 +106,20 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
   const rawFetchId = await insertRawFetch(rawFetchRow(raw, journey.id), config.db); // the stored row, from insertRawFetch
   const parsed = parseRailRadarLive(raw, rawFetchId); // events, from parseRailRadarLive
 
-  const [stops, topSpeedKmh, confirmedBefore] = await Promise.all([
+  const [stops, topSpeedKmh, caps, confirmedBefore] = await Promise.all([
     timetableFor(trainNumber, config.db),
     topSpeedFor(trainNumber, config.db),
+    sectionCapsFor(trainNumber, config.db),
     resolvedFor(journey.id, config.db),
   ]);
+  const learnedCaps = new Map(caps.map((cap) => [cap.fromSeq, cap.fastestPace]));
 
   // events with the nonsense rules applied, from normalizeEvents
   const normalized = normalizeEvents(parsed.events, {
     journeyDate,
     stops,
     topSpeedKmh,
+    learnedCaps,
     confirmed: confirmedBefore,
   });
   await saveSourceEvents(normalized, journey.id, config.db);
@@ -130,7 +134,14 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
   await saveResolvedEvents(resolved, config.db);
 
   // where the train is, from estimate
-  const where = estimate({ journeyDate, stops, confirmed: resolved, topSpeedKmh, now });
+  const where = estimate({
+    journeyDate,
+    stops,
+    confirmed: resolved,
+    topSpeedKmh,
+    learnedCaps,
+    now,
+  });
   // when it is next due a check, from nextCheck
   const due = nextCheck({
     journeyDate,
