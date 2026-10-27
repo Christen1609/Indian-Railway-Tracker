@@ -15,6 +15,7 @@ const AGREE_WINDOW_MIN = 2;
 const HIGH_FROM = 0.75;
 const MEDIUM_FROM = 0.5;
 const FULL_AGREEMENT = 1;
+const ONE_SOURCE = 1;
 
 export type Trust = ReadonlyMap<SourceId, number>;
 
@@ -40,12 +41,12 @@ function trustOf(source: SourceId, trust: Trust): number {
   return trust.get(source) ?? 0;
 }
 
-/** The confidence level a score earns */
-export function confidenceOf(score: number): Confidence {
-  if (score >= HIGH_FROM) {
-    return 'high';
+/** The confidence level a score earns, which one source alone can never carry to high */
+export function confidenceOf(score: number, sources: number): Confidence {
+  if (score < MEDIUM_FROM) {
+    return 'low';
   }
-  return score >= MEDIUM_FROM ? 'medium' : 'low';
+  return score >= HIGH_FROM && sources > ONE_SOURCE ? 'high' : 'medium';
 }
 
 /** Surviving events gathered by the station and the kind of event they report */
@@ -165,7 +166,7 @@ export function resolveEvents(input: ResolveInput): ResolvedEvent[] {
       type: group.type,
       at: chosen.at,
       confidenceScore,
-      confidence: confidenceOf(confidenceScore), // the level it earns, from confidenceOf
+      confidence: confidenceOf(confidenceScore, sources.length), // the level it earns, from confidenceOf
       chosenSource: chosen.source,
       sources,
       resolvedAt: input.resolvedAt,

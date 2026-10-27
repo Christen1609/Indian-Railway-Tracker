@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { istDateOf, toUtc } from '../time.js';
-import type { EventType, RawFetch, SourceEvent } from '../types.js';
+import type { EventType, IsoDate, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'railradar';
 const OBSERVED = 'observed';
@@ -31,7 +31,7 @@ const LiveResponse = z.object({
   }),
 });
 
-export type ParseResult = { events: SourceEvent[]; errors: string[] };
+export type ParseResult = { events: SourceEvent[]; errors: string[]; journeyDate: IsoDate | null };
 
 /** Canonical station code for a RailRadar one */
 export function canonicalStationCode(code: string): string {
@@ -55,11 +55,12 @@ function reportedTimes(
 /** Events from one RailRadar live response, with every problem found */
 export function parseRailRadarLive(raw: RawFetch, rawFetchId: string): ParseResult {
   if (raw.error !== undefined) {
-    return { events: [], errors: [`RailRadar fetch failed. ${raw.error}`] };
+    return { events: [], errors: [`RailRadar fetch failed. ${raw.error}`], journeyDate: null };
   }
   if (raw.status !== OK) {
     return {
       events: [],
+      journeyDate: null,
       errors: [`RailRadar returned ${raw.status}. Check RAILRADAR_API_KEY in .env.`],
     };
   }
@@ -68,13 +69,14 @@ export function parseRailRadarLive(raw: RawFetch, rawFetchId: string): ParseResu
   try {
     body = JSON.parse(raw.body);
   } catch {
-    return { events: [], errors: ['RailRadar body is not JSON.'] };
+    return { events: [], errors: ['RailRadar body is not JSON.'], journeyDate: null };
   }
 
   const parsed = LiveResponse.safeParse(body);
   if (!parsed.success) {
     return {
       events: [],
+      journeyDate: null,
       errors: parsed.error.issues.map(
         (issue) => `RailRadar response at ${issue.path.join('.')}: ${issue.message}`,
       ),
@@ -83,7 +85,7 @@ export function parseRailRadarLive(raw: RawFetch, rawFetchId: string): ParseResu
 
   const { success, data } = parsed.data;
   if (!success) {
-    return { events: [], errors: ['RailRadar reported success false.'] };
+    return { events: [], errors: ['RailRadar reported success false.'], journeyDate: null };
   }
 
   const events: SourceEvent[] = [];
@@ -141,5 +143,5 @@ export function parseRailRadarLive(raw: RawFetch, rawFetchId: string): ParseResu
     }
   }
 
-  return { events, errors };
+  return { events, errors, journeyDate };
 }
