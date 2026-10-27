@@ -1,5 +1,6 @@
 // Features: one check of one journey, from the fetch to the state the browser reads
 
+import { windowHits } from '@train-tracker/core/accuracy/score';
 import { estimate } from '@train-tracker/core/estimate';
 import { afterFailure, afterSuccess, callVerdict } from '@train-tracker/core/schedule/health';
 import type { SourceHealth } from '@train-tracker/core/schedule/health';
@@ -7,10 +8,13 @@ import { normalizeEvents } from '@train-tracker/core/fusion/normalize';
 import { resolveEvents } from '@train-tracker/core/fusion/resolve';
 import { nextCheck } from '@train-tracker/core/schedule/next-check';
 import { parseRailRadarLive } from '@train-tracker/core/sources/railradar';
-import type { IsoDate, IsoUtc, SourceId } from '@train-tracker/core/types';
+import type { IsoDate, IsoUtc, ResolvedEvent, SourceId } from '@train-tracker/core/types';
 import { fetchRailRadarLive } from '../adapters/railradar.js';
 import {
   journeyFor,
+  loggedWindowsFor,
+  saveEstimate,
+  saveWindowHits,
   resolvedFor,
   saveResolvedEvents,
   saveSourceEvents,
@@ -42,6 +46,28 @@ export type CheckOutcome = {
   confirmed: number;
   rejected: number;
 };
+
+/** Grades the windows we showed for any arrival this check was the first to confirm */
+async function gradeNewArrivals(
+  journeyId: string,
+  before: readonly ResolvedEvent[],
+  now: readonly ResolvedEvent[],
+  db: Config['db'],
+): Promise<number> {
+  const known = new Set(
+    before.filter((event) => event.type === 'ARR').map((event) => event.stationCode),
+  );
+  const fresh = now.filter((event) => event.type === 'ARR' && !known.has(event.stationCode));
+
+  let graded = 0;
+  for (const arrival of fresh) {
+    const logged = await loggedWindowsFor(journeyId, arrival.stationCode, db); // windows we showed, from loggedWindowsFor
+    const hits = windowHits(arrival.stationCode, arrival.at, logged); // one row per window, from windowHits
+    await saveWindowHits(journeyId, hits, db);
+    graded += hits.length;
+  }
+  return graded;
+}
 
 /** Runs one check of one journey, saving the raw response before anything can fail */
 export async function checkJourney(input: CheckInput): Promise<CheckOutcome | null> {
@@ -122,6 +148,9 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     { ...where, journeyId: journey.id, nextCheckAt: due.at, updatedAt: now },
     config.db,
   );
+  await saveEstimate(journey.id, where, now, config.db);
+
+  const graded = await gradeNewArrivals(journey.id, confirmedBefore, resolved, config.db); // arrivals graded, from gradeNewArrivals
 
   const rejected = normalized.filter((event) => event.rejected !== undefined).length;
   log('info', 'checked', {
@@ -136,6 +165,7 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     delayMin: where.delayMin,
     nextStation: where.nextStation,
     confirmed: resolved.length,
+    graded,
     rejected,
     reason: due.reason,
     nextCheckAt: due.at,
