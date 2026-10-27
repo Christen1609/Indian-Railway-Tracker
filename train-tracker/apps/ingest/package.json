@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --build",
-    "start": "tsc --build && node --env-file=../../.env dist/main.js"
+    "start": "tsc --build && node --env-file=../../.env dist/main.js",
+    "retention": "tsc --build && node --env-file=../../.env dist/jobs/retention.js"
   },
   "dependencies": {
     "@train-tracker/core": "workspace:*",

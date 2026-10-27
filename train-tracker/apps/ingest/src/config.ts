@@ -8,6 +8,7 @@ import type { DbConfig } from './db/rest.js';
 const MINUTE_LIST = /^\d+(,\d+)*$/;
 const RAILRADAR_BUDGET = 100;
 const RAILRADAR_RESERVE = 55;
+const RETENTION_HOURS = 24;
 
 const Env = z.object({
   RAILRADAR_API_KEY: z.string().min(1),
@@ -15,6 +16,7 @@ const Env = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   RAILRADAR_MONTHLY_BUDGET: z.coerce.number().int().nonnegative().optional(),
   RAILRADAR_DEMO_RESERVE: z.coerce.number().int().nonnegative().optional(),
+  RETENTION_HOURS: z.coerce.number().int().positive().optional(),
   WINDOW_CHECK_INTERVAL_MIN: z.coerce.number().int().positive().optional(),
   LATE_CHECK_INTERVALS_MIN: z.string().regex(MINUTE_LIST).optional(),
 });
@@ -25,6 +27,7 @@ export type Config = {
   railRadarApiKey: string;
   db: DbConfig;
   quota: Quota;
+  retentionHours: number;
   intervals: CheckIntervals;
 };
 
@@ -46,6 +49,7 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       monthlyBudget: data.RAILRADAR_MONTHLY_BUDGET ?? RAILRADAR_BUDGET,
       demoReserve: data.RAILRADAR_DEMO_RESERVE ?? RAILRADAR_RESERVE,
     },
+    retentionHours: data.RETENTION_HOURS ?? RETENTION_HOURS,
     intervals: {
       windowMin: data.WINDOW_CHECK_INTERVAL_MIN ?? DEFAULT_CHECK_INTERVALS.windowMin,
       lateMin:

@@ -39,6 +39,10 @@
     "./schedule/health": {
       "types": "./dist/schedule/health.d.ts",
       "import": "./dist/schedule/health.js"
+    },
+    "./schedule/retention": {
+      "types": "./dist/schedule/retention.d.ts",
+      "import": "./dist/schedule/retention.js"
     }
   },
   "scripts": {

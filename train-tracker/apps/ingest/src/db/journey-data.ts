@@ -15,7 +15,7 @@ import type {
   TrainStateKind,
 } from '@train-tracker/core/types';
 import { istMonthStart } from '@train-tracker/core/time';
-import { countRows, readRows, writeRows } from './rest.js';
+import { countRows, deleteRows, patchRows, readRows, writeRows } from './rest.js';
 import type { DbConfig } from './rest.js';
 
 const JourneyRows = z.array(z.object({ id: z.string().min(1), is_scored: z.boolean() }));
@@ -49,7 +49,17 @@ const StateRows = z.array(
   z.object({ next_check_at: z.string().nullable(), updated_at: z.string().min(1) }),
 );
 
+const UncleanedRows = z.array(
+  z.object({
+    id: z.string().min(1),
+    train_number: z.string().min(1),
+    journey_date: z.string().min(1),
+  }),
+);
+
 export type JourneyRef = { id: string; isScored: boolean };
+
+export type UncleanedJourney = { id: string; trainNumber: string; journeyDate: IsoDate };
 
 export type StateMemory = { nextCheckAt: IsoUtc | null; updatedAt: IsoUtc };
 
@@ -76,6 +86,41 @@ export async function journeyFor(
   const row = started[0];
   assert(row !== undefined, 'a journey row back from starting a journey');
   return { id: row.id, isScored: row.is_scored };
+}
+
+/** The journeys whose data has not been swept yet */
+export async function uncleanedJourneys(config: DbConfig): Promise<UncleanedJourney[]> {
+  const query =
+    'journeys?cleaned_at=is.null&select=id,train_number,journey_date&order=journey_date.asc';
+  const rows = UncleanedRows.parse(await readRows(query, config)); // rows, from readRows
+  return rows.map((row) => ({
+    id: row.id,
+    trainNumber: row.train_number,
+    journeyDate: row.journey_date,
+  }));
+}
+
+/** Whether a journey has been scored, which is what guards its confirmed events */
+export async function hasScores(journeyId: string, config: DbConfig): Promise<boolean> {
+  const counted = await countRows(`journey_scores?journey_id=eq.${journeyId}`, config); // the count, from countRows
+  return counted > 0;
+}
+
+/** Deletes the raw responses of one journey, which scoring never needs */
+export async function deleteRawFor(journeyId: string, config: DbConfig): Promise<void> {
+  await deleteRows(`raw_fetches?journey_id=eq.${journeyId}`, config);
+}
+
+/** Deletes everything we worked out about one journey, once its scores are safe */
+export async function deleteDerivedFor(journeyId: string, config: DbConfig): Promise<void> {
+  for (const table of ['source_events', 'resolved_events', 'train_state']) {
+    await deleteRows(`${table}?journey_id=eq.${journeyId}`, config);
+  }
+}
+
+/** Marks a journey as arrived and swept, so the sweep never looks at it again */
+export async function markCleaned(journeyId: string, at: IsoUtc, config: DbConfig): Promise<void> {
+  await patchRows(`journeys?id=eq.${journeyId}`, { status: 'arrived', cleaned_at: at }, config);
 }
 
 /** How many calls one source has cost since the IST month began */
