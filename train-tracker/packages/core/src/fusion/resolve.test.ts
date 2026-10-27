@@ -36,20 +36,32 @@ function resolveOne(events: readonly SourceEvent[], asked: readonly SourceId[] =
   return resolved[0];
 }
 
+const TWO_SOURCES = 2;
+const ONE_SOURCE = 1;
+
 describe('confidenceOf', () => {
-  it('reads 0.75 and above as high', () => {
-    expect(confidenceOf(1)).toBe('high');
-    expect(confidenceOf(0.75)).toBe('high');
+  it('reads 0.75 and above as high when more than one source agrees', () => {
+    expect(confidenceOf(1, TWO_SOURCES)).toBe('high');
+    expect(confidenceOf(0.75, TWO_SOURCES)).toBe('high');
   });
 
   it('reads 0.5 up to 0.75 as medium', () => {
-    expect(confidenceOf(0.74)).toBe('medium');
-    expect(confidenceOf(0.5)).toBe('medium');
+    expect(confidenceOf(0.74, TWO_SOURCES)).toBe('medium');
+    expect(confidenceOf(0.5, TWO_SOURCES)).toBe('medium');
   });
 
   it('reads below 0.5 as low', () => {
-    expect(confidenceOf(0.49)).toBe('low');
-    expect(confidenceOf(0)).toBe('low');
+    expect(confidenceOf(0.49, TWO_SOURCES)).toBe('low');
+    expect(confidenceOf(0, TWO_SOURCES)).toBe('low');
+  });
+
+  it('never calls one source alone high, however well it scores', () => {
+    expect(confidenceOf(1, ONE_SOURCE)).toBe('medium');
+    expect(confidenceOf(0.75, ONE_SOURCE)).toBe('medium');
+  });
+
+  it('still calls one source alone low when it scores badly', () => {
+    expect(confidenceOf(0.3, ONE_SOURCE)).toBe('low');
   });
 });
 
@@ -91,11 +103,11 @@ describe('resolveEvents, against the worked examples in DATA_SOURCES.md', () => 
       at: '2026-10-21T15:50:00.000Z',
     },
     {
-      name: 'the scrape alone when it was the only source asked scores 1.00',
+      name: 'the scrape alone when it was the only source asked scores 1.00 but still reads medium',
       events: [said({ source: 'railyatri_scrape', at: '2026-10-21T15:50:00.000Z' })],
       asked: ['railyatri_scrape'],
       score: 1,
-      confidence: 'high',
+      confidence: 'medium',
       chosenSource: 'railyatri_scrape',
       at: '2026-10-21T15:50:00.000Z',
     },
@@ -193,6 +205,26 @@ describe('resolveEvents, what it refuses to count', () => {
       ['railradar'],
     );
     expect(resolved?.confidenceScore).toBe(1);
+  });
+});
+
+describe('resolveEvents, the single source ceiling DATA_SOURCES.md states', () => {
+  it('caps a lone RailRadar confirmation at medium, as seen on the first live run', () => {
+    const resolved = resolveOne(
+      [said({ source: 'railradar', at: '2026-10-21T15:49:00.000Z' })],
+      ['railradar'],
+    );
+    expect(resolved?.confidenceScore).toBe(1);
+    expect(resolved?.confidence).toBe('medium');
+    expect(resolved?.sources).toEqual(['railradar']);
+  });
+
+  it('lets the same score read high once a second source agrees', () => {
+    const resolved = resolveOne([
+      said({ source: 'railradar', at: '2026-10-21T15:49:00.000Z' }),
+      said({ source: 'railyatri_scrape', at: '2026-10-21T15:50:00.000Z' }),
+    ]);
+    expect(resolved?.confidence).toBe('high');
   });
 });
 

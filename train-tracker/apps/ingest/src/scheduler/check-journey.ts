@@ -73,8 +73,8 @@ async function gradeNewArrivals(
 export async function checkJourney(input: CheckInput): Promise<CheckOutcome | null> {
   const { trainNumber, config, now } = input;
   const raw = await fetchRailRadarLive(trainNumber, config.railRadarApiKey); // the response, from fetchRailRadarLive
-  const probe = parseRailRadarLive(raw, ''); // events, from parseRailRadarLive
-  const journeyDate = probe.events[0]?.journeyDate;
+  const probe = parseRailRadarLive(raw, ''); // the run it named, from parseRailRadarLive
+  const journeyDate = probe.journeyDate;
 
   // whether this call counts against the source, from callVerdict
   const verdict = callVerdict({
@@ -89,9 +89,9 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     config.db,
   );
 
-  if (journeyDate === undefined) {
+  if (journeyDate === null) {
     await insertRawFetch(rawFetchRow(raw, NO_JOURNEY), config.db);
-    log('warn', 'check_gave_nothing', {
+    log('warn', 'check_unreadable', {
       source: RAILRADAR,
       trainNumber,
       status: raw.status,
