@@ -1,12 +1,20 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
-import { istDateOf } from '@train-tracker/core/time';
+import { dayOffset, formatIstClock, istDateOf } from '@train-tracker/core/time';
 import type { IsoUtc } from '@train-tracker/core/types';
 import { Brand } from '../brand/brand';
 import { alongKmOf, buildTrack, pointAt } from '../map/geometry';
 import type { Coord } from '../map/geometry';
 import { ROUTES, TRAIN_NAMES_HI } from '../map/route-12951';
+import { journeyProgress, RUNNING_STATES } from './journey-progress';
 import { SearchField } from '../search/search-field';
-import { describeTrainStatus, formatAgo, formatClock, formatJourneyDate } from '../../lib/format';
+import {
+  describeTrainStatus,
+  formatAgo,
+  formatClock,
+  formatJourneyDate,
+  formatKmOf,
+  formatStationName,
+} from '../../lib/format';
 import { useNow, useTrackedTrains } from '../../lib/live';
 import type { TrackedTrain } from '../../lib/live';
 import { hasMovedPages, NavLink, trainSearch } from '../../lib/navigation';
@@ -18,28 +26,55 @@ const LandingMap = lazy(() =>
 const TRACKED_NUMBERS = Object.keys(ROUTES);
 const SEARCH_ID = 'train-search';
 const NO_MARKS: Coord[] = [];
-const RUNNING_STATES = ['running', 'halted', 'late'];
 
-/** One tracked train as a link with its status */
-function TrainRow({ tracked, now }: { tracked: TrackedTrain; now: IsoUtc }) {
+/** Station's clock and any later day, such as "08:32" and "+1" */
+function StopTime({ minute }: { minute: number | null }) {
+  if (minute === null) {
+    return null;
+  }
+  const laterDays = dayOffset(minute) - 1; // days after the first, from dayOffset
+  return (
+    <span className="jc-time">
+      <span className="mono">{formatIstClock(minute)}</span> IST
+      {laterDays > 0 && <span className="mono"> +{laterDays}</span>}
+    </span>
+  );
+}
+
+/** One tracked train as a live journey card that links to its 3D view */
+function JourneyCard({ tracked, now }: { tracked: TrackedTrain; now: IsoUtc }) {
   const { train, stops, stations, journey, state } = tracked;
-  const nameOf = (code: string) => stations.get(code)?.name ?? code;
+  const nameOf = (code: string) => formatStationName(stations.get(code)?.name ?? code); // title-case name, from formatStationName
   const first = stops[0];
+  const last = stops.at(-1);
+  const nextStop = stops.find((stop) => stop.stationCode === state?.nextStation);
   const status = describeTrainStatus({
     state: journey === null ? null : state,
     nextName: state?.nextStation == null ? null : nameOf(state.nextStation),
+    nextDueMin: nextStop?.schedArrMin ?? nextStop?.schedDepMin ?? null,
     originName: nameOf(train.origin),
     destinationName: nameOf(train.destination),
     departMin: first?.schedDepMin ?? null,
   });
+  const progress = journeyProgress(stops, journey === null ? null : state); // fill, ticks and dot, from journeyProgress
   const nameHi = TRAIN_NAMES_HI[train.number];
   const isToday = journey === null || journey.journeyDate === istDateOf(now);
+  const numberId = `tno-${train.number}`;
+  const nameId = `name-${train.number}`;
+  const statusId = `status-${train.number}`;
   return (
     <li>
-      <NavLink search={trainSearch(train.number)} className="run">
-        <span className="tno">{train.number}</span>
-        <span className="run-body">
-          <span className="run-name">
+      <NavLink
+        search={trainSearch(train.number)}
+        className="panel jcard"
+        labelledBy={`${numberId} ${nameId}`}
+        describedBy={statusId}
+      >
+        <span className="jc-head">
+          <span className="tno" id={numberId}>
+            {train.number}
+          </span>
+          <span className="run-name" id={nameId}>
             {train.name}
             {nameHi !== undefined && (
               <span className="run-hi" lang="hi">
@@ -47,12 +82,39 @@ function TrainRow({ tracked, now }: { tracked: TrackedTrain; now: IsoUtc }) {
               </span>
             )}
           </span>
-          <span className={`run-status ${status.tone}`}>{status.text}</span>
-          {state !== null && (
-            <span className="run-meta">Updated {formatAgo(state.updatedAt, now)}</span>
+        </span>
+        <span className="jc-ends">
+          <span className="jc-end">
+            <b>{nameOf(train.origin)}</b>
+            <StopTime minute={first?.schedDepMin ?? null} />
+          </span>
+          <span className="jc-end jc-dest">
+            <b>{nameOf(train.destination)}</b>
+            <StopTime minute={last?.schedArrMin ?? null} />
+          </span>
+        </span>
+        <span className="jc-bar" aria-hidden="true">
+          <span className="jc-fill" style={{ width: `${progress.fraction * 100}%` }}></span>
+          {progress.ticks.map((tick) => (
+            <i className="jc-tick" key={tick} style={{ left: `${tick * 100}%` }}></i>
+          ))}
+          {progress.hasDot && (
+            <span className="jc-dot" style={{ left: `${progress.fraction * 100}%` }}></span>
           )}
+        </span>
+        <span className="jc-km mono" aria-hidden="true">
+          {formatKmOf(progress.doneKm, progress.totalKm)}
+        </span>
+        <span className="jc-status" id={statusId}>
+          <span className={`run-status ${status.tone}`}>{status.text}</span>
+          {status.delayText !== null && (
+            <span className={`run-status ${status.tone}`}>{status.delayText}</span>
+          )}
+        </span>
+        <span className="jc-foot">
+          {state !== null && <span>Updated {formatAgo(state.updatedAt, now)}</span>}
           {!isToday && journey !== null && (
-            <span className="run-meta">{formatJourneyDate(journey.journeyDate)} run</span>
+            <span>{formatJourneyDate(journey.journeyDate)} run</span>
           )}
         </span>
       </NavLink>
@@ -131,7 +193,7 @@ export function Landing() {
             {trains !== null && trains.length > 0 && (
               <ul className="runs">
                 {trains.map((tracked) => (
-                  <TrainRow key={tracked.train.number} tracked={tracked} now={now} />
+                  <JourneyCard key={tracked.train.number} tracked={tracked} now={now} />
                 ))}
               </ul>
             )}
