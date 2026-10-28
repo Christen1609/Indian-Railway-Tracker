@@ -16,6 +16,7 @@ import type {
   TrainStateKind,
 } from '@train-tracker/core/types';
 import type { LoggedWindow, WindowHit } from '@train-tracker/core/accuracy/score';
+import type { SectionCapSeen } from '@train-tracker/core/estimate';
 import { istMonthStart } from '@train-tracker/core/time';
 import { countRows, deleteRows, patchRows, readRows, writeRows } from './rest.js';
 import type { DbConfig } from './rest.js';
@@ -33,6 +34,14 @@ const StopRows = z.array(
 );
 
 const TrainRows = z.array(z.object({ top_speed_kmh: z.number().int().nullable() }));
+
+const CapRows = z.array(
+  z.object({
+    from_seq: z.number().int(),
+    fastest_pace: z.number(),
+    trips_seen: z.number().int(),
+  }),
+);
 
 const ResolvedRows = z.array(
   z.object({
@@ -242,6 +251,40 @@ export async function topSpeedFor(trainNumber: string, config: DbConfig): Promis
   const query = `trains?number=eq.${trainNumber}&select=top_speed_kmh`;
   const rows = TrainRows.parse(await readRows(query, config)); // rows, from readRows
   return rows[0]?.top_speed_kmh ?? null;
+}
+
+/** The fastest pace ever seen on each of a train's sections */
+export async function sectionCapsFor(
+  trainNumber: string,
+  config: DbConfig,
+): Promise<SectionCapSeen[]> {
+  const query = `section_caps?train_number=eq.${trainNumber}&select=from_seq,fastest_pace,trips_seen`;
+  const rows = CapRows.parse(await readRows(query, config)); // rows, from readRows
+  return rows.map((row) => ({
+    fromSeq: row.from_seq,
+    fastestPace: row.fastest_pace,
+    tripsSeen: row.trips_seen,
+  }));
+}
+
+/** Records what a finished journey ran its sections at, keeping the fastest we have seen */
+export async function saveSectionCaps(
+  trainNumber: string,
+  caps: readonly SectionCapSeen[],
+  now: IsoUtc,
+  config: DbConfig,
+): Promise<void> {
+  if (caps.length === 0) {
+    return;
+  }
+  const rows = caps.map((cap) => ({
+    train_number: trainNumber,
+    from_seq: cap.fromSeq,
+    fastest_pace: cap.fastestPace,
+    trips_seen: cap.tripsSeen,
+    updated_at: now,
+  }));
+  await writeRows('section_caps', rows, config, 'train_number,from_seq');
 }
 
 /** Every confirmed event of one journey */

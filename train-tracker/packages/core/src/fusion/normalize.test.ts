@@ -16,6 +16,14 @@ const STOPS = [
   { seq: 7, stationCode: 'NDLS', km: 1388.4, schedArrMin: 1952, schedDepMin: null },
 ].map((stop) => ({ ...stop, trainNumber: '12951' }));
 
+const BVI_SEQ = 1;
+const SEEN_PACE = 0.84;
+
+/** 12951 with BVI's departure missing, so no section chains out of it */
+const UNCHAINED_STOPS = STOPS.map((stop) =>
+  stop.stationCode === 'BVI' ? { ...stop, schedDepMin: null } : stop,
+);
+
 /** One source event, reported at the moment it was fetched unless said otherwise */
 function ev(stationCode: string, type: EventType, at: string, fetchedAt?: string): SourceEvent {
   return {
@@ -149,7 +157,7 @@ const CASES: Case[] = [
   },
   {
     proves: 'the backwards rule ignores a confirmation that is not high confidence',
-    events: [ev('BVI', 'ARR', '2026-10-21T16:00:00.000Z', '2026-10-21T16:05:00.000Z')],
+    events: [ev('BVI', 'ARR', '2026-10-21T18:00:00.000Z', '2026-10-21T18:05:00.000Z')],
     context: ctx({ confirmed: [confirm('ST', 'ARR', '2026-10-21T14:06:18.000Z', 'medium')] }),
     rejected: [undefined],
   },
@@ -161,14 +169,48 @@ const CASES: Case[] = [
   },
   {
     proves: 'a jump the train could actually make survives',
-    events: [ev('ST', 'ARR', '2026-10-21T14:06:18.000Z', '2026-10-21T14:10:00.000Z')],
+    events: [ev('ST', 'ARR', '2026-10-21T14:11:18.000Z', '2026-10-21T14:15:00.000Z')],
     context: ctx({ confirmed: [confirm('BVI', 'ARR', '2026-10-21T12:06:18.000Z', 'high')] }),
     rejected: [undefined],
   },
   {
-    proves: 'the speed rule is skipped when the train has no recorded top speed',
+    proves: "a jump inside the rated top speed but outside the section's own cap is too_fast",
+    events: [ev('ST', 'ARR', '2026-10-21T14:06:18.000Z', '2026-10-21T14:10:00.000Z')],
+    context: ctx({ confirmed: [confirm('BVI', 'ARR', '2026-10-21T12:06:18.000Z', 'high')] }),
+    rejected: ['too_fast'],
+  },
+  {
+    proves: 'a learned cap from a section we have seen run that fast lets the same jump through',
+    events: [ev('ST', 'ARR', '2026-10-21T14:06:18.000Z', '2026-10-21T14:10:00.000Z')],
+    context: ctx({
+      learnedCaps: new Map([[BVI_SEQ, SEEN_PACE]]),
+      confirmed: [confirm('BVI', 'ARR', '2026-10-21T12:06:18.000Z', 'high')],
+    }),
+    rejected: [undefined],
+  },
+  {
+    proves: 'the timetable alone catches an impossible jump, with no recorded top speed at all',
     events: [ev('NDLS', 'ARR', '2026-10-21T12:36:18.000Z', '2026-10-21T12:40:00.000Z')],
     context: ctx({
+      topSpeedKmh: null,
+      confirmed: [confirm('BVI', 'ARR', '2026-10-21T12:06:18.000Z', 'high')],
+    }),
+    rejected: ['too_fast'],
+  },
+  {
+    proves: 'with no cap to be had, the rated top speed still catches an impossible jump',
+    events: [ev('NDLS', 'ARR', '2026-10-21T12:36:18.000Z', '2026-10-21T12:40:00.000Z')],
+    context: ctx({
+      stops: UNCHAINED_STOPS,
+      confirmed: [confirm('BVI', 'ARR', '2026-10-21T12:06:18.000Z', 'high')],
+    }),
+    rejected: ['too_fast'],
+  },
+  {
+    proves: 'the pace rule is skipped entirely when neither a cap nor a top speed is known',
+    events: [ev('ST', 'ARR', '2026-10-21T14:06:18.000Z', '2026-10-21T14:10:00.000Z')],
+    context: ctx({
+      stops: UNCHAINED_STOPS,
       topSpeedKmh: null,
       confirmed: [confirm('BVI', 'ARR', '2026-10-21T12:06:18.000Z', 'high')],
     }),

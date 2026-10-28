@@ -1,5 +1,6 @@
 // Features: the retention sweep
 
+import { learnCaps, observedPaces } from '@train-tracker/core/estimate';
 import { retentionCheck } from '@train-tracker/core/schedule/retention';
 import { readConfig } from '../config.js';
 import {
@@ -8,6 +9,8 @@ import {
   hasScores,
   markCleaned,
   resolvedFor,
+  saveSectionCaps,
+  sectionCapsFor,
   timetableFor,
   uncleanedJourneys,
 } from '../db/journey-data.js';
@@ -55,6 +58,10 @@ async function main(): Promise<void> {
 
     await deleteRawFor(journey.id, config.db);
     if (verdict.deleteDerived) {
+      // what this run managed on each section, from observedPaces
+      const ran = observedPaces(stops, confirmed, journey.journeyDate);
+      const known = await sectionCapsFor(journey.trainNumber, config.db); // the record so far, from sectionCapsFor
+      await saveSectionCaps(journey.trainNumber, learnCaps(known, ran), now, config.db);
       await deleteDerivedFor(journey.id, config.db);
       await markCleaned(journey.id, now, config.db);
     }

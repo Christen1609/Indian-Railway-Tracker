@@ -1,16 +1,19 @@
 // Features: canonical codes, the seven nonsense rules, the normalize pass
 
+import { sectionCap, sections } from '../estimate.js';
 import { minutesBetween, timetableMinuteToUtc, toUtc } from '../time.js';
 import type { IsoDate, RejectReason, ResolvedEvent, SourceEvent, TimetableStop } from '../types.js';
 
 const CLOCK_DRIFT_MIN = 1;
 const BEFORE_START_MIN = 30;
 const MIN_PER_HOUR = 60;
+const PACE_TOLERANCE_MIN = 1;
 
 export type NormalizeContext = {
   journeyDate: IsoDate;
   stops: readonly TimetableStop[];
   topSpeedKmh: number | null;
+  learnedCaps?: ReadonlyMap<number, number>;
   confirmed: readonly ResolvedEvent[];
 };
 
@@ -32,19 +35,43 @@ function originDeparture(ctx: NormalizeContext): string | null {
     : timetableMinuteToUtc(ctx.journeyDate, origin.schedDepMin);
 }
 
+/**
+ * The fewest minutes the stretch between two stops may be run in, by this train's own
+ * section caps, or null when the timetable cannot chain the two together.
+ */
+function fastestStretchMin(ctx: NormalizeContext, fromSeq: number, toSeq: number): number | null {
+  const low = Math.min(fromSeq, toSeq);
+  const high = Math.max(fromSeq, toSeq);
+  const bySeq = new Map(sections(ctx.stops).map((section) => [section.fromSeq, section])); // sections, from sections
+
+  let fastest = 0;
+  let seq = low;
+  while (seq < high) {
+    const section = bySeq.get(seq);
+    if (section === undefined) {
+      return null;
+    }
+    // fastest pace allowed here, learned where we have seen the section run, from sectionCap
+    const cap = sectionCap(section, ctx.topSpeedKmh, ctx.learnedCaps?.get(seq));
+    fastest += section.timetabledMin * cap;
+    seq = section.toSeq;
+  }
+  return seq === high ? fastest : null;
+}
+
 /** Why one event is nonsense, or null when it survives every rule */
 function rejectionFor(
   event: SourceEvent,
   ctx: NormalizeContext,
-  kmByStation: ReadonlyMap<string, number>,
+  stopByCode: ReadonlyMap<string, TimetableStop>,
   arrivalAt: ReadonlyMap<string, string>,
 ): RejectReason | null {
   if (!isUsableInstant(event.at) || !isUsableInstant(event.fetchedAt)) {
     return 'bad_format';
   }
 
-  const km = kmByStation.get(event.stationCode);
-  if (km === undefined) {
+  const stop = stopByCode.get(event.stationCode);
+  if (stop === undefined) {
     return 'off_route';
   }
 
@@ -66,11 +93,11 @@ function rejectionFor(
     if (confirmed.confidence !== 'high') {
       continue;
     }
-    const confirmedKm = kmByStation.get(confirmed.stationCode);
-    if (confirmedKm === undefined) {
+    const confirmedStop = stopByCode.get(confirmed.stationCode);
+    if (confirmedStop === undefined) {
       continue;
     }
-    if (confirmedKm > km && minutesBetween(confirmed.at, event.at) > 0) {
+    if (confirmedStop.km > stop.km && minutesBetween(confirmed.at, event.at) > 0) {
       return 'backwards';
     }
   }
@@ -80,11 +107,19 @@ function rejectionFor(
       furthest === null || minutesBetween(furthest.at, candidate.at) > 0 ? candidate : furthest,
     null,
   );
-  const latestKm = latest === null ? undefined : kmByStation.get(latest.stationCode);
-  if (ctx.topSpeedKmh !== null && latest !== null && latestKm !== undefined) {
+  const latestStop = latest === null ? undefined : stopByCode.get(latest.stationCode);
+  if (latest !== null && latestStop !== undefined) {
     const minutes = minutesBetween(latest.at, event.at);
-    const distanceKm = Math.abs(km - latestKm);
-    if (minutes > 0 && distanceKm / (minutes / MIN_PER_HOUR) > ctx.topSpeedKmh) {
+    // the fewest minutes this stretch allows, from fastestStretchMin
+    const fastest = fastestStretchMin(ctx, latestStop.seq, stop.seq);
+    const distanceKm = Math.abs(stop.km - latestStop.km);
+    if (minutes <= 0) {
+      return null;
+    }
+    if (fastest !== null) {
+      return minutes + PACE_TOLERANCE_MIN < fastest ? 'too_fast' : null;
+    }
+    if (ctx.topSpeedKmh !== null && distanceKm / (minutes / MIN_PER_HOUR) > ctx.topSpeedKmh) {
       return 'too_fast';
     }
   }
@@ -97,7 +132,7 @@ export function normalizeEvents(
   events: readonly SourceEvent[],
   ctx: NormalizeContext,
 ): SourceEvent[] {
-  const kmByStation = new Map(ctx.stops.map((stop) => [stop.stationCode, stop.km]));
+  const stopByCode = new Map(ctx.stops.map((stop) => [stop.stationCode, stop]));
   const named = events.map((event) => ({
     ...event,
     stationCode: canonicalCode(event.stationCode), // canonical code, from canonicalCode
@@ -117,7 +152,7 @@ export function normalizeEvents(
 
   return named.map((event) => {
     // the rule it broke, from rejectionFor
-    const reason = rejectionFor(event, ctx, kmByStation, arrivalAt);
+    const reason = rejectionFor(event, ctx, stopByCode, arrivalAt);
     return reason === null ? event : { ...event, rejected: reason };
   });
 }
