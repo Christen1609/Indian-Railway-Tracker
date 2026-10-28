@@ -1,4 +1,4 @@
-// Features: journey load, realtime subscription, clock tick
+// Features: journey load, tracked trains load, realtime subscription, clock tick
 
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
@@ -35,6 +35,19 @@ export type JourneyView = {
 
 export type Load =
   { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; view: JourneyView };
+
+export type TrackedTrain = {
+  train: Train;
+  stops: TimetableStop[];
+  stations: Map<string, Station>;
+  journey: Journey | null;
+  state: TrainState | null;
+};
+
+export type TrackedLoad =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready'; trains: TrackedTrain[] };
 
 type LiveView = Pick<JourneyView, 'state' | 'events'>;
 
@@ -121,6 +134,68 @@ async function loadJourney(trainNumber: string): Promise<JourneyView> {
   };
 }
 
+/** Train states of journeys */
+function loadStates(journeyIds: string[]): Promise<TrainState[]> {
+  return readRows(
+    TrainStateRow,
+    supabase.from('train_state').select('*').in('journey_id', journeyIds),
+    'the train states',
+  );
+}
+
+/** Each train's timetable and latest journey with its state */
+async function loadTracked(trainNumbers: readonly string[]): Promise<TrackedTrain[]> {
+  const [trains, stops, journeyLists] = await Promise.all([
+    readRows(
+      TrainRow,
+      supabase.from('trains').select('*').in('number', trainNumbers),
+      'the trains',
+    ),
+    readRows(
+      TimetableStopRow,
+      supabase.from('timetable_stops').select('*').in('train_number', trainNumbers).order('seq'),
+      'the timetables',
+    ),
+    Promise.all(
+      trainNumbers.map((trainNumber) =>
+        readRows(
+          JourneyRow,
+          supabase
+            .from('journeys')
+            .select('*')
+            .eq('train_number', trainNumber)
+            .order('journey_date', { ascending: false })
+            .limit(1),
+          'the latest journeys',
+        ),
+      ),
+    ),
+  ]);
+  const journeys = journeyLists.flat();
+  const [stations, states] = await Promise.all([
+    readRows(
+      StationRow,
+      supabase
+        .from('stations')
+        .select('*')
+        .in('code', [...new Set(stops.map((stop) => stop.stationCode))]),
+      'the stations',
+    ),
+    journeys.length === 0 ? [] : loadStates(journeys.map((journey) => journey.id)), // train states, from loadStates
+  ]);
+  const stationsByCode = new Map(stations.map((station) => [station.code, station]));
+  return trains.map((train) => {
+    const journey = journeys.find((candidate) => candidate.trainNumber === train.number) ?? null;
+    return {
+      train,
+      stops: stops.filter((stop) => stop.trainNumber === train.number),
+      stations: stationsByCode,
+      journey,
+      state: states.find((state) => state.journeyId === journey?.id) ?? null,
+    };
+  });
+}
+
 /** Text for a failure, from its message when it has one */
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : LOAD_FAILED;
@@ -182,6 +257,81 @@ export function useLiveJourney(trainNumber: string): Load {
       void supabase.removeChannel(channel);
     };
   }, [journeyId]);
+
+  return load;
+}
+
+/** The trains in the timetable among the given numbers, kept current by Realtime */
+export function useTrackedTrains(trainNumbers: readonly string[]): TrackedLoad {
+  const [load, setLoad] = useState<TrackedLoad>({ kind: 'loading' });
+  const journeyKey =
+    load.kind === 'ready'
+      ? load.trains
+          .flatMap((tracked) => (tracked.journey === null ? [] : [tracked.journey.id]))
+          .join()
+      : '';
+
+  useEffect(() => {
+    let isCurrent = true;
+    setLoad({ kind: 'loading' });
+    loadTracked(trainNumbers).then(
+      (trains) => {
+        if (isCurrent) {
+          setLoad({ kind: 'ready', trains });
+        }
+      },
+      (error: unknown) => {
+        if (isCurrent) {
+          setLoad({ kind: 'error', message: describeError(error) });
+        }
+      },
+    );
+    return () => {
+      isCurrent = false;
+    };
+  }, [trainNumbers]);
+
+  useEffect(() => {
+    if (journeyKey === '') {
+      return;
+    }
+    const journeyIds = journeyKey.split(',');
+    const refresh = () => {
+      loadStates(journeyIds).then(
+        (states) =>
+          setLoad((current) =>
+            current.kind === 'ready'
+              ? {
+                  kind: 'ready',
+                  trains: current.trains.map((tracked) => ({
+                    ...tracked,
+                    state: states.find((state) => state.journeyId === tracked.journey?.id) ?? null,
+                  })),
+                }
+              : current,
+          ),
+        (error: unknown) => setLoad({ kind: 'error', message: describeError(error) }),
+      );
+    };
+    const channel = journeyIds.reduce(
+      (open, journeyId) =>
+        open.on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'train_state',
+            filter: `journey_id=eq.${journeyId}`,
+          },
+          refresh,
+        ),
+      supabase.channel('tracked-train-state'),
+    );
+    channel.subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [journeyKey]);
 
   return load;
 }

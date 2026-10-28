@@ -1,4 +1,4 @@
-// Features: IST clocks and dates, relative time, delay, pace, distance
+// Features: IST clocks and dates, relative time, delay, train status, pace, distance
 
 import {
   dayOffset,
@@ -8,7 +8,7 @@ import {
   timetableMinuteToUtc,
   utcToTimetableMinute,
 } from '@train-tracker/core/time';
-import type { ArrivalWindow, IsoDate, IsoUtc } from '@train-tracker/core/types';
+import type { ArrivalWindow, IsoDate, IsoUtc, TrainState } from '@train-tracker/core/types';
 
 const IST_ZONE = 'Asia/Kolkata';
 const MINUTES_PER_HOUR = 60;
@@ -20,6 +20,8 @@ const JOURNEY_DATE_PARTS: Intl.DateTimeFormatOptions = {
   month: 'short',
   year: 'numeric',
 };
+
+export type StatusLine = { text: string; tone: 'ok' | 'warn' | 'late' | 'idle' };
 
 /** IST date words for an instant, such as "Tue 27 Oct 2026" */
 function formatIstDate(at: IsoUtc, parts: Intl.DateTimeFormatOptions): string {
@@ -95,6 +97,36 @@ export function delayTone(delayMin: number): 'ok' | 'warn' | 'late' {
     return 'ok';
   }
   return delayMin <= MINOR_DELAY_MIN ? 'warn' : 'late';
+}
+
+/** One line on where a train is, with the tone to colour it */
+export function describeTrainStatus(input: {
+  state: TrainState | null;
+  nextName: string | null;
+  originName: string;
+  destinationName: string;
+  departMin: number | null;
+}): StatusLine {
+  const { state, nextName, originName, destinationName, departMin } = input;
+  if (state === null) {
+    return { text: 'No position recorded yet', tone: 'idle' };
+  }
+  const delayMin = state.delayMin;
+  const tone = delayMin === null ? 'ok' : delayTone(delayMin); // colour class, from delayTone
+  const delayText = delayMin === null ? '' : formatDelay(delayMin); // delay in words, from formatDelay
+  if (state.state === 'scheduled') {
+    const at = departMin === null ? '' : ` at ${formatTimetableMinute(departMin)}`; // departure clock, from formatTimetableMinute
+    return { text: `Leaves ${originName}${at}`, tone: 'idle' };
+  }
+  if (state.state === 'arrived') {
+    const delay = delayMin === null ? '' : `, ${delayText.toLowerCase()}`;
+    return { text: `Arrived ${destinationName}${delay}`, tone };
+  }
+  const lead = state.state === 'halted' ? 'Halted' : 'Running';
+  const delay =
+    delayMin === null ? lead : delayText === 'On time' ? 'On time' : `${lead} ${delayText}`;
+  const next = nextName === null ? '' : `, next stop ${nextName}`;
+  return { text: `${delay}${next}`, tone };
 }
 
 /** Pace as a share faster or slower than the timetable */

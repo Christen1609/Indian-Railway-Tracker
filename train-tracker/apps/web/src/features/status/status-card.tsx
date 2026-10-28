@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type {
   IsoDate,
   IsoUtc,
@@ -9,7 +10,7 @@ import type {
 } from '@train-tracker/core/types';
 import { alongKmOf, nextIndex } from '../map/geometry';
 import type { Track } from '../map/geometry';
-import { TRAIN_NAME_HI } from '../map/route-12951';
+import { TRAIN_NAMES_HI } from '../map/route-12951';
 import {
   delayTone,
   formatAgo,
@@ -19,6 +20,7 @@ import {
   formatTimetableMinute,
   formatWindow,
 } from '../../lib/format';
+import { hasMovedPages } from '../../lib/navigation';
 
 type Props = {
   train: Train;
@@ -39,11 +41,18 @@ const STATE_LABELS: Record<TrainStateKind, string> = {
 };
 
 export function StatusCard({ train, stops, stations, state, track, journeyDate, now }: Props) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const nameHi = TRAIN_NAMES_HI[train.number];
   const nameOf = (code: string) => stations.get(code)?.name ?? code;
   const nextIdx = nextIndex(track, alongKmOf(track, state.km)); // route point just ahead, from nextIndex
   const before = track.points[nextIdx - 1];
   const after = track.points[nextIdx];
   const destination = stops.at(-1);
+  useEffect(() => {
+    if (hasMovedPages()) {
+      headingRef.current?.focus();
+    }
+  }, []);
   const isDue =
     destination !== undefined &&
     state.state !== 'arrived' &&
@@ -57,8 +66,8 @@ export function StatusCard({ train, stops, stations, state, track, journeyDate, 
     <section className="panel card" aria-label="Train status">
       <div className="cardtop">
         <span className="tno">{train.number}</span>
-        <h1>
-          {train.name} <span lang="hi">{TRAIN_NAME_HI}</span>
+        <h1 ref={headingRef} tabIndex={-1}>
+          {train.name} {nameHi !== undefined && <span lang="hi">{nameHi}</span>}
         </h1>
       </div>
       <div className="status" aria-live="polite">

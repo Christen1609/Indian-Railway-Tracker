@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { TrainState } from '@train-tracker/core/types';
 import {
   delayTone,
+  describeTrainStatus,
   formatAgo,
   formatClock,
   formatDelay,
@@ -118,5 +120,98 @@ describe('formatKm', () => {
     [123456, '1,23,456 km'],
   ])('%f', (distanceKm, expected) => {
     expect(formatKm(distanceKm)).toBe(expected);
+  });
+});
+
+const STATE: TrainState = {
+  journeyId: 'j1',
+  state: 'running',
+  km: 100,
+  loKm: 95,
+  hiKm: 105,
+  pace: 1,
+  delayMin: 17,
+  nextStation: 'KOTA',
+  window: null,
+  nextCheckAt: null,
+  updatedAt: '2026-10-27T10:00:00.000Z',
+};
+const PLACES = { originName: 'Mumbai Central', destinationName: 'New Delhi', departMin: 1020 };
+
+describe('describeTrainStatus', () => {
+  it.each([
+    [
+      'running late with the next stop',
+      { ...STATE },
+      'Kota Jn',
+      { text: 'Running 17 min late, next stop Kota Jn', tone: 'late' },
+    ],
+    [
+      'a small delay is a warning',
+      { ...STATE, delayMin: 5 },
+      null,
+      { text: 'Running 5 min late', tone: 'warn' },
+    ],
+    [
+      'on time with the next stop',
+      { ...STATE, delayMin: 0 },
+      'Surat',
+      { text: 'On time, next stop Surat', tone: 'ok' },
+    ],
+    [
+      'running early',
+      { ...STATE, delayMin: -4 },
+      null,
+      { text: 'Running 4 min early', tone: 'ok' },
+    ],
+    [
+      'running with no delay known',
+      { ...STATE, delayMin: null },
+      null,
+      { text: 'Running', tone: 'ok' },
+    ],
+    [
+      'halted and late',
+      { ...STATE, state: 'halted' as const },
+      null,
+      { text: 'Halted 17 min late', tone: 'late' },
+    ],
+    [
+      'arrived late',
+      { ...STATE, state: 'arrived' as const, delayMin: 10 },
+      null,
+      { text: 'Arrived New Delhi, 10 min late', tone: 'warn' },
+    ],
+    [
+      'arrived on time',
+      { ...STATE, state: 'arrived' as const, delayMin: 0 },
+      null,
+      { text: 'Arrived New Delhi, on time', tone: 'ok' },
+    ],
+    [
+      'not started with a departure time',
+      { ...STATE, state: 'scheduled' as const },
+      null,
+      { text: 'Leaves Mumbai Central at 17:00', tone: 'idle' },
+    ],
+  ])('%s', (_name, state, nextName, expected) => {
+    expect(describeTrainStatus({ state, nextName, ...PLACES })).toEqual(expected);
+  });
+
+  it('says leaving without a time when the timetable has none', () => {
+    const status = describeTrainStatus({
+      state: { ...STATE, state: 'scheduled' },
+      nextName: null,
+      ...PLACES,
+      departMin: null,
+    });
+    expect(status.text).toBe('Leaves Mumbai Central');
+  });
+
+  it('says no position when there is no state', () => {
+    expect(describeTrainStatus({ state: null, nextName: null, ...PLACES })).toEqual({
+      text: 'No position recorded yet',
+      tone: 'idle',
+    });
   });
 });

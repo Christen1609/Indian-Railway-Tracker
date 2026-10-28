@@ -269,4 +269,6 @@ export const MAJOR_CODES: ReadonlySet<string> = new Set([
 
 export const TRAIN_NAME_HI = 'मुंबई राजधानी';
 
+export const TRAIN_NAMES_HI: Record<string, string> = { '12951': TRAIN_NAME_HI };
+
 export const ROUTES: Record<string, RoutePoint[]> = { '12951': ROUTE_12951 };

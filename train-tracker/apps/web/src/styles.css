@@ -188,10 +188,9 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 6px 0 12px;
-  height: 40px;
-  width: 300px;
-  max-width: 100%;
+  padding: 0 2px 0 12px;
+  height: 48px;
+  width: 100%;
 }
 .search svg {
   flex: none;
@@ -209,20 +208,12 @@ input:focus-visible {
 .search input::placeholder {
   color: var(--muted);
 }
-.search button {
-  border: 0;
-  background: var(--fg);
-  color: var(--solid);
-  border-radius: 9px;
-  height: 30px;
-  padding: 0 13px;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-}
 .search-msg {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--muted);
+}
+.search-msg:empty {
+  display: none;
 }
 .spacer {
   flex: 1;
@@ -854,14 +845,15 @@ input:focus-visible {
   .bar {
     gap: 6px;
   }
-  .word-hi,
-  .search {
+  .word-hi {
+    display: none;
+  }
+  .bar .sf {
     width: auto;
     flex: 1 1 0;
-    height: 38px;
   }
-  .search button {
-    padding: 0 10px;
+  .flow {
+    padding-inline: 34px;
   }
   .brand {
     padding: 6px 8px;
@@ -871,17 +863,6 @@ input:focus-visible {
   }
   .bar {
     position: relative;
-  }
-  .search-msg {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 2px;
-    background: var(--panel);
-    border-radius: 8px;
-    padding: 3px 9px;
-  }
-  .search-msg:empty {
-    display: none;
   }
   .bottom {
     grid-column: 1;
@@ -961,5 +942,460 @@ input:focus-visible {
   }
   .stops .list {
     animation: none;
+  }
+}
+
+/* search field */
+.sf {
+  position: relative;
+  min-width: 0;
+}
+.bar .sf {
+  width: 300px;
+  max-width: 100%;
+}
+.bar .search-msg {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--fg);
+  z-index: 3;
+}
+.sf-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 4;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--solid);
+  color: var(--fg);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-size: 16px;
+}
+.sf-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sf-list li[aria-selected='true'],
+.sf-list li:hover {
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+.sf input {
+  font-size: 16px;
+}
+.sf-suggest {
+  display: block;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: 600 15px var(--f-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.sf-suggest:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+a:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+a.brand {
+  color: inherit;
+  text-decoration: none;
+  min-height: 44px;
+}
+
+/* flow button */
+.search {
+  --flow-ink: var(--fg);
+  --flow-on: var(--solid);
+}
+.flow {
+  --flow-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --flow-grow: cubic-bezier(0.19, 1, 0.22, 1);
+  --flow-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 40px;
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--flow-ink);
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--flow-ink) 40%, transparent);
+  border-radius: 100px;
+  font: 600 16px/1 var(--f-body);
+  white-space: nowrap;
+  transition:
+    border-color 0.6s var(--flow-ease),
+    border-radius 0.6s var(--flow-ease),
+    color 0.6s var(--flow-ease),
+    transform 0.15s ease-out;
+}
+.flow:active {
+  transform: scale(0.95);
+}
+.flow:focus-visible {
+  outline: 2px solid var(--flow-ink);
+  outline-offset: 3px;
+}
+.flow-fill {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  background: var(--flow-ink);
+  opacity: 0;
+  transform: scale(1);
+  transition:
+    transform 0.8s var(--flow-grow),
+    opacity 0.8s var(--flow-grow);
+}
+.flow-label {
+  position: relative;
+  z-index: 1;
+  transform: translateX(-12px);
+  transition: transform 0.8s ease-out;
+}
+.flow-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  margin-top: -8px;
+  transition: transform 0.8s var(--flow-spring);
+}
+.flow-out {
+  right: 16px;
+}
+.flow-in {
+  left: 16px;
+  transform: translateX(-48px);
+}
+.flow:focus-visible,
+.flow:active {
+  border-color: transparent;
+  border-radius: 12px;
+  color: var(--flow-on);
+}
+.flow:focus-visible .flow-fill,
+.flow:active .flow-fill {
+  opacity: 1;
+  transform: scale(14);
+}
+.flow:focus-visible .flow-label,
+.flow:active .flow-label {
+  transform: translateX(12px);
+}
+.flow:focus-visible .flow-out,
+.flow:active .flow-out {
+  transform: translateX(48px);
+}
+.flow:focus-visible .flow-in,
+.flow:active .flow-in {
+  transform: translateX(0);
+}
+@media (hover: hover) {
+  .flow:hover {
+    border-color: transparent;
+    border-radius: 12px;
+    color: var(--flow-on);
+  }
+  .flow:hover .flow-fill {
+    opacity: 1;
+    transform: scale(14);
+  }
+  .flow:hover .flow-label {
+    transform: translateX(12px);
+  }
+  .flow:hover .flow-out {
+    transform: translateX(48px);
+  }
+  .flow:hover .flow-in {
+    transform: translateX(0);
+  }
+}
+
+/* landing */
+.landing-map.maplibregl-map,
+.landing-map {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.landing {
+  position: fixed;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg) 94%, transparent) 0,
+    color-mix(in srgb, var(--bg) 84%, transparent) 640px,
+    transparent 900px
+  );
+}
+.landing-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
+  width: min(100%, 600px);
+  min-height: 100dvh;
+  padding: max(18px, env(safe-area-inset-top, 0px)) 16px max(24px, env(safe-area-inset-bottom, 0px))
+    64px;
+}
+.landing-col > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.landing-col > section {
+  width: 100%;
+}
+.landing h2 {
+  margin: 0 0 6px;
+  font: 600 24px/1.2 var(--f-disp);
+}
+.landing p {
+  margin: 0;
+  font-size: 15px;
+}
+
+/* station sign */
+.sign {
+  --flow-ink: var(--sig-ink);
+  --flow-on: var(--sig);
+  position: relative;
+  margin-bottom: 20px;
+  padding: clamp(14px, 3vw, 22px);
+  background: var(--sig);
+  color: var(--sig-ink);
+  border: 3px solid var(--sig-ink);
+  border-radius: 4px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.sign h1 {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 14px;
+  text-align: center;
+}
+.sign-hi {
+  font:
+    700 clamp(22px, 5vw, 36px) / 1.1 'Anek Devanagari',
+    var(--f-hi);
+}
+.sign-en {
+  font: 700 clamp(40px, 8vw, 80px) / 0.95 var(--f-disp);
+  font-variation-settings: 'wdth' 75;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.sign-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sign-form input {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sig-ink);
+  color: #f6f1de;
+  font: 500 18px var(--f-body);
+}
+.sign-form input::placeholder {
+  color: rgba(246, 241, 222, 0.7);
+}
+.sign-form input:focus-visible {
+  outline: 3px solid var(--sig-ink);
+  outline-offset: 3px;
+}
+.sign .sf {
+  position: static;
+}
+.sign .search-msg {
+  margin-top: 10px;
+  color: var(--sig-ink);
+  font-weight: 500;
+}
+.sign .sf-list {
+  top: auto;
+  left: clamp(14px, 3vw, 22px);
+  right: clamp(14px, 3vw, 22px);
+  margin-top: 6px;
+}
+.landing .sign-clock {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+.sign-legs {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  display: flex;
+  justify-content: space-between;
+  width: 62%;
+  height: 28px;
+  transform: translateX(-50%);
+}
+.sign-legs i {
+  width: 6px;
+  background: var(--post);
+}
+
+/* tracked trains */
+.runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--hair);
+}
+.runs li {
+  border-bottom: 1px solid var(--hair);
+}
+.run {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 44px;
+  padding: 14px 8px;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 0.12s;
+}
+.run:hover,
+.run:focus-visible {
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+}
+.run:focus-visible {
+  outline-offset: -2px;
+}
+.run .tno {
+  margin-top: 3px;
+  font-size: 15px;
+}
+.run-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.run-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  font: 600 18px/1.25 var(--f-disp);
+}
+.run-hi {
+  font: 500 15px/1.25 var(--f-hi);
+  color: var(--muted);
+}
+.run-status {
+  font-weight: 600;
+  font-size: 15px;
+}
+.run-status.ok {
+  color: var(--ok);
+}
+.run-status.warn {
+  color: var(--warn);
+}
+.run-status.late {
+  color: var(--raj);
+}
+.run-status.idle,
+.run-meta {
+  color: var(--muted);
+  font-size: 15px;
+}
+.landing-attrib {
+  margin-top: auto !important;
+  font-size: 13px !important;
+  color: var(--muted);
+}
+.landing-attrib a {
+  color: inherit;
+}
+@media (max-width: 760px) {
+  .landing {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg) 94%, transparent) 0,
+      color-mix(in srgb, var(--bg) 80%, transparent) 55%,
+      color-mix(in srgb, var(--bg) 50%, transparent) 100%
+    );
+  }
+  .landing-col {
+    width: 100%;
+    gap: 24px;
+    padding-left: 16px;
+  }
+  .sign-form input {
+    font-size: 16px;
+  }
+  .sign .flow {
+    padding-inline: 30px;
+  }
+  .sign-legs {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow,
+  .flow-label,
+  .flow-arrow {
+    transition: none;
+  }
+  .flow-label,
+  .flow:hover .flow-label,
+  .flow:focus-visible .flow-label,
+  .flow:active .flow-label {
+    transform: none;
+  }
+  .flow-fill {
+    transform: scale(14);
+    transition: opacity 0.15s linear;
+  }
+  .flow:hover .flow-out,
+  .flow:focus-visible .flow-out,
+  .flow:active .flow-out {
+    transform: none;
+  }
+  .flow:hover .flow-in,
+  .flow:focus-visible .flow-in,
+  .flow:active .flow-in {
+    transform: translateX(-48px);
   }
 }
