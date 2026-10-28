@@ -24,6 +24,7 @@ type Props = {
 };
 
 const SHEET_OFFSET_SHARE = 0.3;
+const PHONE_QUERY = '(max-width: 760px)';
 
 /** Scheduled arrival and departure as short lines */
 function scheduleLines(stop: TimetableStop): string[] {
@@ -37,7 +38,7 @@ function scheduleLines(stop: TimetableStop): string[] {
 
 export function StopSheet({ train, stops, stations, events, state, track, journeyDate }: Props) {
   const [isAll, setIsAll] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(() => !window.matchMedia(PHONE_QUERY).matches);
   const listRef = useRef<HTMLOListElement>(null);
   const hereRef = useRef<HTMLLIElement>(null);
 
@@ -150,7 +151,7 @@ export function StopSheet({ train, stops, stations, events, state, track, journe
   flushHidden(last?.km ?? lastKm, false);
 
   return (
-    <aside className={`panel stops${isOpen ? ' open' : ''}`} aria-label="Journey">
+    <aside className={`panel stops${isOpen ? ' open' : ' shut'}`} aria-label="Journey">
       <header>
         <h2>
           {first ? nameOf(first.stationCode) : ''} to {last ? nameOf(last.stationCode) : ''}
@@ -163,12 +164,23 @@ export function StopSheet({ train, stops, stations, events, state, track, journe
           type="button"
           className="sheet-btn"
           aria-expanded={isOpen}
+          aria-controls="journey-list"
+          aria-label={isOpen ? 'Collapse journey' : 'Expand journey'}
           onClick={() => setIsOpen(!isOpen)}
         >
-          {isOpen ? 'Collapse' : 'Expand'}
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path
+              d="M6 9l6 6 6-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
       </header>
-      <ol className="list" ref={listRef}>
+      <ol className="list" id="journey-list" ref={listRef}>
         {rows}
       </ol>
       <footer>

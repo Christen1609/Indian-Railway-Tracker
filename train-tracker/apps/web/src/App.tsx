@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { Journey, TrainState } from '@train-tracker/core/types';
-import { GroundProfile } from './features/profile/ground-profile';
 import { alongKmOf, buildTrack, pointAt } from './features/map/geometry';
 import { isDarkPanels, sunAt, sunPhase } from './features/map/lighting';
 import { ROUTES } from './features/map/route-12951';
@@ -185,13 +184,6 @@ function Live({
           journeyDate={journey.journeyDate}
         />
         <div className="bottom">
-          <GroundProfile
-            track={track}
-            km={state.km}
-            loKm={state.loKm}
-            hiKm={state.hiKm}
-            theme={isDark ? 'dark' : 'light'}
-          />
           <div className="attrib">
             ©{' '}
             <a href="https://openfreemap.org" target="_blank" rel="noopener">
