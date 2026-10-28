@@ -37,7 +37,7 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
   {
-    files: ['*.config.js', '*.config.ts'],
+    files: ['**/*.config.js', '**/*.config.ts'],
     rules: { 'no-restricted-syntax': 'off' },
   },
 );
