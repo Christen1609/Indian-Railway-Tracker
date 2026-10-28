@@ -1,19 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { capPace, recentPace, sectionCap, sectionPace, sections } from './estimate.js';
 import type { TimetableStop } from './types.js';
-
-const TOP_SPEED_KMH = 130;
-
-const STOPS: TimetableStop[] = [
-  { seq: 0, stationCode: 'BCT', km: 0, schedArrMin: null, schedDepMin: 1020 },
-  { seq: 1, stationCode: 'BVI', km: 30, schedArrMin: 1040, schedDepMin: 1042 },
-  { seq: 2, stationCode: 'ST', km: 263.6, schedArrMin: 1183, schedDepMin: 1188 },
-  { seq: 3, stationCode: 'BRC', km: 393.2, schedArrMin: 1266, schedDepMin: 1276 },
-  { seq: 4, stationCode: 'RTM', km: 653.6, schedArrMin: 1465, schedDepMin: 1468 },
-  { seq: 5, stationCode: 'NAD', km: 697.4, schedArrMin: 1508, schedDepMin: 1510 },
-  { seq: 6, stationCode: 'KOTA', km: 922.8, schedArrMin: 1635, schedDepMin: 1640 },
-  { seq: 7, stationCode: 'NDLS', km: 1388.4, schedArrMin: 1952, schedDepMin: null },
-].map((stop) => ({ ...stop, trainNumber: '12951' }));
+import { STOPS_12951 as STOPS, TOP_SPEED_KMH } from './testing/journey-12951.js';
 
 describe('sections', () => {
   it('builds one section between each pair of stops', () => {
