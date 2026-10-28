@@ -20,7 +20,6 @@ const JOURNEY_DATE_PARTS: Intl.DateTimeFormatOptions = {
   month: 'short',
   year: 'numeric',
 };
-const STAMP_DATE_PARTS: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
 
 /** IST date words for an instant, such as "Tue 27 Oct 2026" */
 function formatIstDate(at: IsoUtc, parts: Intl.DateTimeFormatOptions): string {
@@ -61,10 +60,10 @@ export function formatJourneyDate(journeyDate: IsoDate): string {
   return formatIstDate(midnight, JOURNEY_DATE_PARTS);
 }
 
-/** UTC instant as an IST date and clock */
-export function formatStamp(at: IsoUtc): string {
+/** UTC instant as an IST clock */
+export function formatClock(at: IsoUtc): string {
   const minute = utcToTimetableMinute(istDateOf(at), at); // minutes from midnight IST on its own date, from utcToTimetableMinute
-  return `${formatIstDate(at, STAMP_DATE_PARTS)}, ${formatIstClock(minute)}`;
+  return formatIstClock(minute);
 }
 
 /** How long before now an instant was, in the largest whole unit */
