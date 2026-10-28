@@ -21,7 +21,11 @@ const JOURNEY_DATE_PARTS: Intl.DateTimeFormatOptions = {
   year: 'numeric',
 };
 
-export type StatusLine = { text: string; tone: 'ok' | 'warn' | 'late' | 'idle' };
+export type StatusLine = {
+  text: string;
+  delayText: string | null;
+  tone: 'ok' | 'warn' | 'late' | 'idle';
+};
 
 /** IST date words for an instant, such as "Tue 27 Oct 2026" */
 function formatIstDate(at: IsoUtc, parts: Intl.DateTimeFormatOptions): string {
@@ -99,34 +103,53 @@ export function delayTone(delayMin: number): 'ok' | 'warn' | 'late' {
   return delayMin <= MINOR_DELAY_MIN ? 'warn' : 'late';
 }
 
-/** One line on where a train is, with the tone to colour it */
+/** Where a train is in words, with its delay and the tone to colour it */
 export function describeTrainStatus(input: {
   state: TrainState | null;
   nextName: string | null;
+  nextDueMin: number | null;
   originName: string;
   destinationName: string;
   departMin: number | null;
 }): StatusLine {
-  const { state, nextName, originName, destinationName, departMin } = input;
+  const { state, nextName, nextDueMin, originName, destinationName, departMin } = input;
   if (state === null) {
-    return { text: 'No position recorded yet', tone: 'idle' };
+    return { text: 'No position recorded yet', delayText: null, tone: 'idle' };
   }
   const delayMin = state.delayMin;
   const tone = delayMin === null ? 'ok' : delayTone(delayMin); // colour class, from delayTone
-  const delayText = delayMin === null ? '' : formatDelay(delayMin); // delay in words, from formatDelay
+  const delayText = delayMin === null ? null : formatDelay(delayMin); // delay in words, from formatDelay
   if (state.state === 'scheduled') {
     const at = departMin === null ? '' : ` at ${formatTimetableMinute(departMin)}`; // departure clock, from formatTimetableMinute
-    return { text: `Leaves ${originName}${at}`, tone: 'idle' };
+    return { text: `Leaves ${originName}${at}`, delayText: null, tone: 'idle' };
   }
   if (state.state === 'arrived') {
-    const delay = delayMin === null ? '' : `, ${delayText.toLowerCase()}`;
-    return { text: `Arrived ${destinationName}${delay}`, tone };
+    const delay = delayText === null ? '' : `, ${delayText.toLowerCase()}`;
+    return { text: `Arrived ${destinationName}${delay}`, delayText: null, tone };
   }
   const lead = state.state === 'halted' ? 'Halted' : 'Running';
-  const delay =
-    delayMin === null ? lead : delayText === 'On time' ? 'On time' : `${lead} ${delayText}`;
-  const next = nextName === null ? '' : `, next stop ${nextName}`;
-  return { text: `${delay}${next}`, tone };
+  if (nextName === null) {
+    return { text: lead, delayText, tone };
+  }
+  const due = nextDueMin === null ? '' : `, due ${formatTimetableMinute(nextDueMin)}`; // scheduled clock, from formatTimetableMinute
+  return { text: `Next: ${nextName}${due}`, delayText, tone };
+}
+
+/** Station name in title case, leaving words that already mix cases alone */
+export function formatStationName(name: string): string {
+  return name
+    .split(/(\s+|-)/)
+    .map((word) =>
+      word.length > 1 && word === word.toUpperCase()
+        ? `${word.charAt(0)}${word.slice(1).toLowerCase()}`
+        : word,
+    )
+    .join('');
+}
+
+/** Distance covered out of a total, such as "612 of 1,388 km" */
+export function formatKmOf(doneKm: number, totalKm: number): string {
+  return `${Math.round(doneKm).toLocaleString('en-IN')} of ${formatKm(totalKm)}`; // total with its unit, from formatKm
 }
 
 /** Pace as a share faster or slower than the timetable */

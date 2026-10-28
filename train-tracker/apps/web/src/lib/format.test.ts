@@ -9,6 +9,8 @@ import {
   formatJourneyClock,
   formatJourneyDate,
   formatKm,
+  formatKmOf,
+  formatStationName,
   formatPace,
   formatTimetableMinute,
   formatWindow,
@@ -136,66 +138,75 @@ const STATE: TrainState = {
   nextCheckAt: null,
   updatedAt: '2026-10-27T10:00:00.000Z',
 };
-const PLACES = { originName: 'Mumbai Central', destinationName: 'New Delhi', departMin: 1020 };
+const PLACES = {
+  originName: 'Mumbai Central',
+  destinationName: 'New Delhi',
+  departMin: 1020,
+  nextDueMin: 135,
+};
 
 describe('describeTrainStatus', () => {
   it.each([
     [
-      'running late with the next stop',
+      'running late with the next stop and its due time',
       { ...STATE },
       'Kota Jn',
-      { text: 'Running 17 min late, next stop Kota Jn', tone: 'late' },
+      { text: 'Next: Kota Jn, due 02:15', delayText: '17 min late', tone: 'late' },
     ],
     [
       'a small delay is a warning',
       { ...STATE, delayMin: 5 },
-      null,
-      { text: 'Running 5 min late', tone: 'warn' },
+      'Kota Jn',
+      { text: 'Next: Kota Jn, due 02:15', delayText: '5 min late', tone: 'warn' },
     ],
     [
-      'on time with the next stop',
+      'on time',
       { ...STATE, delayMin: 0 },
       'Surat',
-      { text: 'On time, next stop Surat', tone: 'ok' },
+      { text: 'Next: Surat, due 02:15', delayText: 'On time', tone: 'ok' },
     ],
     [
-      'running early',
-      { ...STATE, delayMin: -4 },
+      'running with no next stop',
+      { ...STATE, delayMin: 4 },
       null,
-      { text: 'Running 4 min early', tone: 'ok' },
+      { text: 'Running', delayText: '4 min late', tone: 'warn' },
     ],
     [
-      'running with no delay known',
-      { ...STATE, delayMin: null },
+      'halted with no delay known',
+      { ...STATE, state: 'halted' as const, delayMin: null },
       null,
-      { text: 'Running', tone: 'ok' },
-    ],
-    [
-      'halted and late',
-      { ...STATE, state: 'halted' as const },
-      null,
-      { text: 'Halted 17 min late', tone: 'late' },
+      { text: 'Halted', delayText: null, tone: 'ok' },
     ],
     [
       'arrived late',
       { ...STATE, state: 'arrived' as const, delayMin: 10 },
       null,
-      { text: 'Arrived New Delhi, 10 min late', tone: 'warn' },
+      { text: 'Arrived New Delhi, 10 min late', delayText: null, tone: 'warn' },
     ],
     [
       'arrived on time',
       { ...STATE, state: 'arrived' as const, delayMin: 0 },
       null,
-      { text: 'Arrived New Delhi, on time', tone: 'ok' },
+      { text: 'Arrived New Delhi, on time', delayText: null, tone: 'ok' },
     ],
     [
       'not started with a departure time',
       { ...STATE, state: 'scheduled' as const },
       null,
-      { text: 'Leaves Mumbai Central at 17:00', tone: 'idle' },
+      { text: 'Leaves Mumbai Central at 17:00', delayText: null, tone: 'idle' },
     ],
   ])('%s', (_name, state, nextName, expected) => {
     expect(describeTrainStatus({ state, nextName, ...PLACES })).toEqual(expected);
+  });
+
+  it('leaves out the due time when the timetable has none', () => {
+    const status = describeTrainStatus({
+      state: STATE,
+      nextName: 'Kota Jn',
+      ...PLACES,
+      nextDueMin: null,
+    });
+    expect(status.text).toBe('Next: Kota Jn');
   });
 
   it('says leaving without a time when the timetable has none', () => {
@@ -211,7 +222,32 @@ describe('describeTrainStatus', () => {
   it('says no position when there is no state', () => {
     expect(describeTrainStatus({ state: null, nextName: null, ...PLACES })).toEqual({
       text: 'No position recorded yet',
+      delayText: null,
       tone: 'idle',
     });
+  });
+});
+
+describe('formatStationName', () => {
+  it.each([
+    ['capitals become title case', 'NEW DELHI', 'New Delhi'],
+    ['a junction suffix stays short', 'KOTA JN', 'Kota Jn'],
+    ['mixed case is left alone', 'Mumbai Central', 'Mumbai Central'],
+    ['a single letter stays', 'H NIZAMUDDIN', 'H Nizamuddin'],
+    ['hyphenated words are each cased', 'SAWAI-MADHOPUR', 'Sawai-Madhopur'],
+    ['a mixed junction name is left alone', 'Kota Jn', 'Kota Jn'],
+  ])('%s', (_name, input, expected) => {
+    expect(formatStationName(input)).toBe(expected);
+  });
+});
+
+describe('formatKmOf', () => {
+  it.each([
+    ['part of the way', 612, 1388, '612 of 1,388 km'],
+    ['not started', 0, 1388, '0 of 1,388 km'],
+    ['the whole way', 1388, 1388, '1,388 of 1,388 km'],
+    ['a fractional position rounds', 611.6, 1388, '612 of 1,388 km'],
+  ])('%s', (_name, doneKm, totalKm, expected) => {
+    expect(formatKmOf(doneKm, totalKm)).toBe(expected);
   });
 });

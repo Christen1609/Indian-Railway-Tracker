@@ -47,10 +47,14 @@ export function navigate(search: string): void {
 export function NavLink({
   search,
   className,
+  labelledBy,
+  describedBy,
   children,
 }: {
   search: string;
   className?: string;
+  labelledBy?: string;
+  describedBy?: string;
   children: ReactNode;
 }) {
   /** Navigate in the page on a plain click */
@@ -63,7 +67,13 @@ export function NavLink({
     }
   }
   return (
-    <a className={className} href={`${window.location.pathname}${search}`} onClick={open}>
+    <a
+      className={className}
+      href={`${window.location.pathname}${search}`}
+      aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
+      onClick={open}
+    >
       {children}
     </a>
   );

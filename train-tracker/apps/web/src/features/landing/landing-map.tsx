@@ -7,17 +7,14 @@ import type { Coord, FeatureCollection } from '../map/geometry';
 import { landingStyle } from '../map/map-style';
 
 const INDIA: [number, number] = [80, 22];
-const TURN_FROM_DEG = 30;
-const TURN_MS = 1200;
+const SPIN_DEG_PER_S = 4;
+const MS_PER_S = 1000;
+const HALF_TURN_DEG = 180;
+const FULL_TURN_DEG = 360;
 const MOBILE_MAX_WIDTH_PX = 760;
 const DESKTOP_COLUMN_PX = 600;
 const SCHEME_QUERY = '(prefers-color-scheme: dark)';
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
-
-/** Ease-out curve for a share of time passed */
-function easeOut(share: number): number {
-  return 1 - (1 - share) ** 3;
-}
 
 /** Zoom and padding that put the globe beside the column on wide screens and below the text on phones */
 function framing() {
@@ -64,24 +61,47 @@ export function LandingMap({ marks }: { marks: Coord[] }) {
       return;
     }
     const scheme = window.matchMedia(SCHEME_QUERY);
-    const isReduced = window.matchMedia(REDUCED_QUERY).matches;
+    const reduced = window.matchMedia(REDUCED_QUERY);
     const { zoom, padding } = framing();
     const map = new MapLibreMap({
       container,
       style: landingStyle(scheme.matches, markerColours(), markerCollection(marksRef.current)),
-      center: isReduced ? INDIA : [INDIA[0] - TURN_FROM_DEG, INDIA[1]],
+      center: INDIA,
       zoom,
       interactive: false,
       attributionControl: false,
       fadeDuration: 0,
     });
     map.setPadding(padding);
+    let frameId = 0;
+    let startedAt: number | null = null;
+
+    /** Turn the globe west to east from India, one frame at a time */
+    const spin = (now: number) => {
+      startedAt ??= now;
+      const turned = (SPIN_DEG_PER_S * (now - startedAt)) / MS_PER_S;
+      const lon =
+        ((((INDIA[0] - turned + HALF_TURN_DEG) % FULL_TURN_DEG) + FULL_TURN_DEG) % FULL_TURN_DEG) -
+        HALF_TURN_DEG;
+      map.jumpTo({ center: [lon, INDIA[1]] });
+      frameId = requestAnimationFrame(spin);
+    };
+
+    /** Spin unless the visitor prefers reduced motion */
+    const applyMotion = () => {
+      cancelAnimationFrame(frameId);
+      if (reduced.matches) {
+        map.jumpTo({ center: INDIA });
+      } else {
+        startedAt = null;
+        frameId = requestAnimationFrame(spin);
+      }
+    };
     map.on('load', () => {
       sourceRef.current = map.getSource<GeoJSONSource>('dots') ?? null;
-      if (!isReduced) {
-        map.easeTo({ center: INDIA, duration: TURN_MS, easing: easeOut });
-      }
     });
+    applyMotion();
+    reduced.addEventListener('change', applyMotion);
     const recolour = () => {
       map.setStyle(
         landingStyle(scheme.matches, markerColours(), markerCollection(marksRef.current)),
@@ -93,6 +113,8 @@ export function LandingMap({ marks }: { marks: Coord[] }) {
     scheme.addEventListener('change', recolour);
     return () => {
       sourceRef.current = null;
+      cancelAnimationFrame(frameId);
+      reduced.removeEventListener('change', applyMotion);
       scheme.removeEventListener('change', recolour);
       map.remove();
     };
