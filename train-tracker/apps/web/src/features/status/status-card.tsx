@@ -1,70 +1,112 @@
-import type { IsoDate, Station, TrainState, TrainStateKind } from '@train-tracker/core/types';
+import type {
+  IsoDate,
+  IsoUtc,
+  Station,
+  TimetableStop,
+  Train,
+  TrainState,
+  TrainStateKind,
+} from '@train-tracker/core/types';
+import { alongKmOf, nextIndex } from '../map/geometry';
+import type { Track } from '../map/geometry';
+import { TRAIN_NAME_HI } from '../map/route-12951';
 import {
   delayTone,
+  formatAgo,
+  formatClock,
   formatDelay,
-  formatJourneyClock,
   formatPace,
+  formatTimetableMinute,
   formatWindow,
 } from '../../lib/format';
 
 type Props = {
-  state: TrainState | null;
-  journeyDate: IsoDate;
+  train: Train;
+  stops: TimetableStop[];
   stations: Map<string, Station>;
+  state: TrainState;
+  track: Track;
+  journeyDate: IsoDate;
+  now: IsoUtc;
 };
 
-const STATE_LINES: Record<TrainStateKind, string> = {
-  scheduled: 'Scheduled, not yet running',
+const STATE_LABELS: Record<TrainStateKind, string> = {
+  scheduled: 'Not yet running',
   running: 'Running',
-  halted: 'Halted at a station',
-  late: 'Running late. Updating soon.',
+  halted: 'Halted',
+  late: 'Running',
   arrived: 'Arrived',
 };
 
-export function StatusCard({ state, journeyDate, stations }: Props) {
-  if (state === null) {
-    return (
-      <section className="card status" aria-label="Current status">
-        <h2 className="st-line">No status recorded yet</h2>
-      </section>
-    );
-  }
-  const { nextStation, window, nextCheckAt, delayMin } = state;
+export function StatusCard({ train, stops, stations, state, track, journeyDate, now }: Props) {
+  const nameOf = (code: string) => stations.get(code)?.name ?? code;
+  const nextIdx = nextIndex(track, alongKmOf(track, state.km)); // route point just ahead, from nextIndex
+  const before = track.points[nextIdx - 1];
+  const after = track.points[nextIdx];
+  const destination = stops.at(-1);
+  const isDue =
+    destination !== undefined &&
+    state.state !== 'arrived' &&
+    state.nextStation !== destination.stationCode;
+  const tone = state.delayMin === null ? 'ok' : delayTone(state.delayMin);
+  const pillText =
+    state.delayMin !== null && state.delayMin > 0
+      ? `${STATE_LABELS[state.state]}, ${formatDelay(state.delayMin)}`
+      : STATE_LABELS[state.state];
   return (
-    <section className="card status" aria-live="polite" aria-label="Current status">
-      <div className="st-top">
-        <h2 className="st-line">{STATE_LINES[state.state]}</h2>
-        {delayMin !== null && (
-          <span className={`pill ${delayTone(delayMin)}`}>{formatDelay(delayMin)}</span>
-        )}
+    <section className="panel card" aria-label="Train status">
+      <div className="cardtop">
+        <span className="tno">{train.number}</span>
+        <h1>
+          {train.name} <span lang="hi">{TRAIN_NAME_HI}</span>
+        </h1>
       </div>
-      <dl className="facts">
-        <div>
-          <dt>Next station</dt>
-          <dd>
-            {nextStation === null ? (
-              'None'
-            ) : (
-              <>
-                <span className="code">{nextStation}</span> {stations.get(nextStation)?.name}
-              </>
-            )}
-            {window !== null && <small>Window {formatWindow(journeyDate, window)} IST</small>}
-          </dd>
+      <div className="status" aria-live="polite">
+        <span className={`pill ${tone}`}>{pillText}</span>
+        <span className="muted">
+          Updated {formatClock(state.updatedAt)} IST, {formatAgo(state.updatedAt, now)}
+        </span>
+      </div>
+      {state.nextStation !== null && (
+        <div className="nextbox">
+          <div className="nrow">
+            <span className="nlab">Next station</span>
+            <span className="nname">{nameOf(state.nextStation)}</span>
+            <span className="code-chip">{state.nextStation}</span>
+          </div>
+          {state.window !== null && (
+            <div className="nwin mono">{formatWindow(journeyDate, state.window)}</div>
+          )}
         </div>
-        <div>
-          <dt>Pace</dt>
-          <dd>{formatPace(state.pace)}</dd>
+      )}
+      <div className="wherebox">
+        <div className="kmpost" aria-hidden="true">
+          <b>{Math.round(state.km)}</b>
+          <span>km</span>
         </div>
-        <div>
-          <dt>Next check</dt>
-          <dd>
-            {nextCheckAt === null
-              ? 'None scheduled'
-              : `${formatJourneyClock(journeyDate, nextCheckAt)} IST`}
-          </dd>
+        <div className="wheretext">
+          {before !== undefined && after !== undefined && (
+            <p className="wherelead">
+              Between {before.name} and {after.name}
+            </p>
+          )}
+          <p className="wheremeta">
+            somewhere along{' '}
+            <span className="nb mono">
+              km {Math.round(state.loKm)}–{Math.round(state.hiKm)}
+            </span>
+            , {formatPace(state.pace).toLowerCase()}
+          </p>
         </div>
-      </dl>
+      </div>
+      {isDue && destination.schedArrMin !== null && (
+        <p className="duerow">
+          <span>Due</span> <b>{nameOf(destination.stationCode)}</b>
+          <span className="mono">{formatTimetableMinute(destination.schedArrMin)}</span>
+          <span>scheduled</span>
+          {state.delayMin !== null && <span>, {formatDelay(state.delayMin)}</span>}
+        </p>
+      )}
     </section>
   );
 }

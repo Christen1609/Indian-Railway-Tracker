@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   delayTone,
   formatAgo,
+  formatClock,
   formatDelay,
   formatJourneyClock,
   formatJourneyDate,
   formatKm,
   formatPace,
-  formatStamp,
   formatTimetableMinute,
   formatWindow,
 } from './format';
@@ -61,12 +61,13 @@ describe('formatJourneyDate', () => {
   });
 });
 
-describe('formatStamp', () => {
+describe('formatClock', () => {
   it.each([
-    ['IST afternoon', '2026-10-27T10:00:00.000Z', '27 Oct, 15:30'],
-    ['IST date ahead of the UTC date', '2026-10-27T19:00:00.000Z', '28 Oct, 00:30'],
+    ['IST afternoon', '2026-10-27T10:00:00.000Z', '15:30'],
+    ['IST date ahead of the UTC date', '2026-10-27T19:00:00.000Z', '00:30'],
+    ['IST midnight', '2026-10-27T18:30:00.000Z', '00:00'],
   ])('%s', (_name, at, expected) => {
-    expect(formatStamp(at)).toBe(expected);
+    expect(formatClock(at)).toBe(expected);
   });
 });
 
