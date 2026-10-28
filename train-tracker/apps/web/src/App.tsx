@@ -1,82 +1,50 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { Journey, TrainState } from '@train-tracker/core/types';
+import { Brand } from './features/brand/brand';
+import { Landing } from './features/landing/landing';
 import { alongKmOf, buildTrack, pointAt } from './features/map/geometry';
 import { isDarkPanels, sunAt, sunPhase } from './features/map/lighting';
 import { ROUTES } from './features/map/route-12951';
 import type { ViewMode } from './features/map/train-map';
+import { trackedSummary } from './features/search/search';
+import { SearchField } from './features/search/search-field';
 import { StatusCard } from './features/status/status-card';
 import { StopSheet } from './features/stops/stop-sheet';
 import { formatClock } from './lib/format';
 import { useLiveJourney, useNow } from './lib/live';
 import type { JourneyView } from './lib/live';
+import { useTrainParam } from './lib/navigation';
 
 const TrainMap = lazy(() =>
   import('./features/map/train-map').then((module) => ({ default: module.TrainMap })),
 );
 
-const DEFAULT_TRAIN_NUMBER = '12951';
-const TRAIN_NUMBER =
-  new URLSearchParams(window.location.search).get('train') || DEFAULT_TRAIN_NUMBER;
-const UNTRACKED_MESSAGE = 'Only 12951 is tracked so far.';
+const TRACKED_CANDIDATES = Object.keys(ROUTES).map((number) => ({ number, name: '' }));
 
 type Chip = { phase: string; clock: string };
 
-function SearchForm() {
-  const [message, setMessage] = useState('');
-  const [value, setValue] = useState(TRAIN_NUMBER);
-
-  /** Open a tracked train, or say it is not tracked */
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    const number = value.trim();
-    if (!Object.hasOwn(ROUTES, number)) {
-      setMessage(UNTRACKED_MESSAGE);
-      return;
-    }
-    const url = new URL(window.location.href);
-    url.searchParams.set('train', number);
-    window.location.assign(url);
-  }
-
-  return (
-    <>
-      <form className="panel search" role="search" onSubmit={submit}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <circle cx="7" cy="7" r="5.2" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-        <input
-          name="q"
-          value={value}
-          placeholder="Train number"
-          aria-label="Train number"
-          autoComplete="off"
-          onChange={(event) => setValue(event.target.value)}
-        />
-        <button type="submit">Track</button>
-      </form>
-      <span className="search-msg" role="status">
-        {message}
-      </span>
-    </>
-  );
-}
-
-function Frame({ chip, children }: { chip: Chip | null; children: ReactNode }) {
+function Frame({
+  chip,
+  trainNumber,
+  children,
+}: {
+  chip: Chip | null;
+  trainNumber: string;
+  children: ReactNode;
+}) {
   return (
     <div className="ui">
       <div className="bar">
-        <div className="panel brand">
-          <span className="mark" aria-hidden="true">
-            क
-          </span>
-          <span className="word">kahan</span>
-          <span className="word-hi" lang="hi">
-            कहाँ
-          </span>
-        </div>
-        <SearchForm />
+        <Brand />
+        <SearchField
+          candidates={TRACKED_CANDIDATES}
+          inputId="train-search"
+          initial={trainNumber}
+          ariaLabel="Train number or name"
+          hasIcon
+          formClass="panel search"
+        />
         <span className="spacer"></span>
         {chip !== null && (
           <div className="panel chip-sun">
@@ -91,9 +59,9 @@ function Frame({ chip, children }: { chip: Chip | null; children: ReactNode }) {
   );
 }
 
-function Notice({ children }: { children: ReactNode }) {
+function Notice({ trainNumber, children }: { trainNumber: string; children: ReactNode }) {
   return (
-    <Frame chip={null}>
+    <Frame chip={null} trainNumber={trainNumber}>
       <p className="panel notice" role="status">
         {children}
       </p>
@@ -127,7 +95,7 @@ function Live({
   }, [isDark]);
 
   if (track === null || sun === null) {
-    return <Notice>{UNTRACKED_MESSAGE}</Notice>;
+    return <Notice trainNumber={view.train.number}>{trackedSummary(TRACKED_CANDIDATES)}</Notice>;
   }
   return (
     <>
@@ -143,7 +111,10 @@ function Live({
           onModeChange={setMode}
         />
       </Suspense>
-      <Frame chip={{ phase: sunPhase(sun), clock: formatClock(now) }}>
+      <Frame
+        chip={{ phase: sunPhase(sun), clock: formatClock(now) }}
+        trainNumber={view.train.number}
+      >
         <div className="left">
           <StatusCard
             train={view.train}
@@ -208,28 +179,34 @@ function Live({
   );
 }
 
-export function App() {
-  const load = useLiveJourney(TRAIN_NUMBER);
+/** The 3D view of one train, or why it cannot be shown */
+function TrainView({ trainNumber }: { trainNumber: string }) {
+  const load = useLiveJourney(trainNumber);
   if (load.kind === 'loading') {
-    return <Notice>Loading train {TRAIN_NUMBER}.</Notice>;
+    return <Notice trainNumber={trainNumber}>Loading train {trainNumber}.</Notice>;
   }
   if (load.kind === 'error') {
-    return <Notice>{load.message}</Notice>;
+    return <Notice trainNumber={trainNumber}>{load.message}</Notice>;
   }
   const { view } = load;
   if (view.journey === null) {
     return (
-      <Notice>
+      <Notice trainNumber={trainNumber}>
         No journey is recorded for {view.train.number} {view.train.name} yet.
       </Notice>
     );
   }
   if (view.state === null) {
     return (
-      <Notice>
+      <Notice trainNumber={trainNumber}>
         No position is recorded for {view.train.number} {view.train.name} yet.
       </Notice>
     );
   }
   return <Live view={view} journey={view.journey} state={view.state} />;
+}
+
+export function App() {
+  const trainNumber = useTrainParam();
+  return trainNumber === null ? <Landing /> : <TrainView trainNumber={trainNumber} />;
 }

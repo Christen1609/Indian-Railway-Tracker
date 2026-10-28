@@ -1,4 +1,4 @@
-// Features: night and day palettes, recolouring list, map style
+// Features: night and day palettes, recolouring list, 3D map style, landing map style
 
 import type { ExpressionSpecification, StyleSpecification } from 'maplibre-gl';
 import { TERRAIN_TILES_URL } from './elevation';
@@ -9,6 +9,8 @@ type PaletteKey = keyof typeof PALETTE.night;
 type Stop = number | ExpressionSpecification;
 
 const OPEN_FREE_MAP_URL = 'https://tiles.openfreemap.org';
+const EARTH_TILES_URL =
+  'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg';
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
 export const INITIAL_EXAGGERATION = 1.8;
 export const BOARD_MIN_ZOOM = 9.5;
@@ -92,24 +94,24 @@ export const PAINT: [layer: string, property: string, key: PaletteKey][] = [
   ['haltlbl', 'text-halo-color', 'halo'],
 ];
 
+/** A GeoJSON source holding data */
+function geojson(data: FeatureCollection = EMPTY) {
+  return { type: 'geojson' as const, data };
+}
+
+/** Filter for features whose class is one of these */
+function classIn(classes: string[]): ExpressionSpecification {
+  return ['in', ['get', 'class'], ['literal', classes]];
+}
+
+/** Value that eases from one zoom stop to another */
+function byZoom(z0: number, v0: Stop, z1: number, v1: Stop): ExpressionSpecification {
+  return ['interpolate', ['linear'], ['zoom'], z0, v0, z1, v1];
+}
+
 /** The map style in night colours, with the track's stations and halts */
 export function mapStyle(track: Track): StyleSpecification {
   const P = PALETTE.night;
-  const geojson = (data: FeatureCollection = EMPTY) => ({ type: 'geojson' as const, data });
-  const classIn = (classes: string[]): ExpressionSpecification => [
-    'in',
-    ['get', 'class'],
-    ['literal', classes],
-  ];
-  const byZoom = (z0: number, v0: Stop, z1: number, v1: Stop): ExpressionSpecification => [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    z0,
-    v0,
-    z1,
-    v1,
-  ];
   const lampKind = (kind: number): ExpressionSpecification => ['==', ['get', 'kind'], kind];
   const stations = pointCollection(
     track.points.map((point) => ({ at: point, properties: { code: point.code } })),
@@ -475,6 +477,61 @@ export function mapStyle(track: Track): StyleSpecification {
           'text-letter-spacing': 0.04,
         },
         paint: { 'text-color': P.label, 'text-halo-color': P.halo, 'text-halo-width': 1.2 },
+      },
+    ],
+  };
+}
+
+/** A globe of satellite imagery with a soft atmosphere and one marker per live train */
+export function landingStyle(
+  isDark: boolean,
+  marker: { fill: string; ring: string },
+  dots: FeatureCollection,
+): StyleSpecification {
+  const space = isDark ? PALETTE.night.bg : PALETTE.day.bg;
+  const halo = isDark ? '#1b2a44' : '#bcd6ec';
+  return {
+    version: 8,
+    projection: { type: 'globe' },
+    sources: {
+      earth: {
+        type: 'raster',
+        tiles: [EARTH_TILES_URL],
+        tileSize: 256,
+        maxzoom: 8,
+      },
+      dots: geojson(dots),
+    },
+    sky: {
+      'sky-color': space,
+      'horizon-color': halo,
+      'fog-color': space,
+      'sky-horizon-blend': 0.6,
+      'horizon-fog-blend': 0.8,
+      'fog-ground-blend': 0.9,
+      'atmosphere-blend': 1,
+    },
+    layers: [
+      {
+        id: 'earth',
+        type: 'raster',
+        source: 'earth',
+        paint: {
+          'raster-opacity': isDark ? 0.8 : 0.92,
+          'raster-brightness-max': isDark ? 0.65 : 1,
+          'raster-saturation': -0.2,
+        },
+      },
+      {
+        id: 'dot',
+        type: 'circle',
+        source: 'dots',
+        paint: {
+          'circle-radius': 5,
+          'circle-color': marker.fill,
+          'circle-stroke-color': marker.ring,
+          'circle-stroke-width': 1.5,
+        },
       },
     ],
   };
