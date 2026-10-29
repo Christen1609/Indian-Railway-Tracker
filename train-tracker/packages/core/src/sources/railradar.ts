@@ -1,16 +1,14 @@
-// Features: live response schema, station code aliases, the live parser
+// Features: live response schema, the live parser
 
 import { z } from 'zod';
 import { istDateOf, toUtc } from '../time.js';
+import { canonicalStationCode } from './stations.js';
 import type { EventType, IsoDate, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'railradar';
 const OBSERVED = 'observed';
 const PREDICTED = 'predicted';
 const OK = 200;
-
-/** RailRadar's station code where it differs from the reference data */
-const STATION_ALIASES: Record<string, string> = { MMCT: 'BCT' };
 
 const RouteStop = z.object({
   sequence: z.number().int(),
@@ -32,11 +30,6 @@ const LiveResponse = z.object({
 });
 
 export type ParseResult = { events: SourceEvent[]; errors: string[]; journeyDate: IsoDate | null };
-
-/** Canonical station code for a RailRadar one */
-export function canonicalStationCode(code: string): string {
-  return STATION_ALIASES[code] ?? code;
-}
 
 /** Events a stop reports, as type and timestamp pairs, before any are confirmed */
 function reportedTimes(
@@ -102,7 +95,10 @@ export function parseRailRadarLive(raw: RawFetch, rawFetchId: string): ParseResu
     }
   }
 
+  let haltsSeen = 0;
   for (const stop of data.route) {
+    const haltOrder = haltsSeen; // this stop's place among the halts
+    haltsSeen += stop.isHalt ? 1 : 0;
     const stationCode = canonicalStationCode(stop.stationCode); // canonical code, from canonicalStationCode
     if (stop.provenance === PREDICTED) {
       continue;
@@ -139,6 +135,7 @@ export function parseRailRadarLive(raw: RawFetch, rawFetchId: string): ParseResu
         at,
         fetchedAt: raw.fetchedAt,
         rawFetchId,
+        ...(stop.isHalt ? { isHalt: true, haltOrder } : {}),
       });
     }
   }

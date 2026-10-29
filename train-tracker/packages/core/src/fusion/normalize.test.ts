@@ -284,3 +284,44 @@ describe('canonicalCode', () => {
     expect(canonicalCode('NDLS')).toBe('NDLS');
   });
 });
+
+describe('normalizeEvents, halt rows with a code we do not know', () => {
+  const STATIONS = new Map([
+    ['BCT', { lat: 18.970667, lon: 72.819383 }],
+    ['BVI', { lat: 19.228739, lon: 72.856412 }],
+    ['ST', { lat: 21.206568, lon: 72.840793 }],
+  ]);
+  const AT = '2026-10-21T12:06:18.000Z';
+
+  /** A halt row of the given order, as a parser flags it */
+  function halt(stationCode: string, haltOrder: number, where?: { lat: number; lon: number }) {
+    return { ...ev(stationCode, 'ARR', AT), isHalt: true, haltOrder, ...where };
+  }
+
+  it('maps it by halt order and coordinates within 2 km', () => {
+    const out = normalizeEvents(
+      [halt('XBVI', 1, { lat: 19.2297, lon: 72.8571 })],
+      ctx({ stations: STATIONS }),
+    );
+    expect(out[0]?.stationCode).toBe('BVI');
+    expect(out[0]?.rejected).toBeUndefined();
+  });
+
+  it('maps it by halt order when both neighbouring halts are known and it has no coordinates', () => {
+    const out = normalizeEvents(
+      [halt('BCT', 0), halt('XBVI', 1), halt('ST', 2)],
+      ctx({ stations: STATIONS }),
+    );
+    expect(out.map((one) => one.stationCode)).toEqual(['BCT', 'BVI', 'ST']);
+  });
+
+  it('rejects it as unknown_halt, not off_route, when it cannot be mapped', () => {
+    const out = normalizeEvents([halt('XBVI', 1)], ctx({ stations: STATIONS }));
+    expect(out[0]?.rejected).toBe('unknown_halt');
+  });
+
+  it('still calls an unknown code off_route when the row is not a halt', () => {
+    const out = normalizeEvents([ev('XBVI', 'PASS', AT)], ctx({ stations: STATIONS }));
+    expect(out[0]?.rejected).toBe('off_route');
+  });
+});

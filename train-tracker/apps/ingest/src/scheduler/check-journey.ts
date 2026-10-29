@@ -16,6 +16,7 @@ import {
   saveEstimate,
   saveWindowHits,
   sectionCapsFor,
+  stationPointsFor,
   resolvedFor,
   saveResolvedEvents,
   saveSourceEvents,
@@ -113,6 +114,11 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     resolvedFor(journey.id, config.db),
   ]);
   const learnedCaps = new Map(caps.map((cap) => [cap.fromSeq, cap.fastestPace]));
+  // coordinates of our stops, from stationPointsFor
+  const stations = await stationPointsFor(
+    stops.map((stop) => stop.stationCode),
+    config.db,
+  );
 
   // events with the nonsense rules applied, from normalizeEvents
   const normalized = normalizeEvents(parsed.events, {
@@ -121,6 +127,7 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     topSpeedKmh,
     learnedCaps,
     confirmed: confirmedBefore,
+    stations,
   });
   await saveSourceEvents(normalized, journey.id, config.db);
 
@@ -168,6 +175,7 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
   const graded = await gradeNewArrivals(journey.id, confirmedBefore, resolved, config.db); // arrivals graded, from gradeNewArrivals
 
   const rejected = normalized.filter((event) => event.rejected !== undefined).length;
+  const unknownHalts = normalized.filter((event) => event.rejected === 'unknown_halt').length;
   log('info', 'checked', {
     source: RAILRADAR,
     failed: verdict.failed,
@@ -182,6 +190,7 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     confirmed: resolved.length,
     graded,
     rejected,
+    unknownHalts,
     reason: due.reason,
     nextCheckAt: due.at,
     parseErrors: parsed.errors.length,

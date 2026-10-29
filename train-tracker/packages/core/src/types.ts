@@ -16,7 +16,8 @@ export type RejectReason =
   | 'dep_before_arr'
   | 'backwards'
   | 'too_fast'
-  | 'bad_format';
+  | 'bad_format'
+  | 'unknown_halt';
 
 export type Station = {
   code: string;
@@ -73,6 +74,10 @@ export type SourceEvent = {
   fetchedAt: IsoUtc;
   rawFetchId: string;
   rejected?: RejectReason;
+  isHalt?: boolean;
+  haltOrder?: number;
+  lat?: number;
+  lon?: number;
 };
 
 export type ResolvedEvent = {
