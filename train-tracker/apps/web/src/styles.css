@@ -343,6 +343,59 @@ input:focus-visible {
   margin-top: 1px;
 }
 
+/* waiting to hear from the train */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.searching {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 0 0;
+  font: 500 14px/1.2 var(--f-body);
+}
+.sglyph {
+  color: var(--warn);
+  display: inline-block;
+  animation: sglyph-spin 3.2s linear infinite;
+}
+.sword {
+  color: transparent;
+  background: linear-gradient(100deg, var(--muted) 35%, var(--fg) 50%, var(--muted) 65%) 0 0 / 250%
+    100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: sword-shimmer 2.2s linear infinite;
+}
+@keyframes sglyph-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes sword-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sglyph,
+  .sword {
+    animation: none;
+  }
+  .sword {
+    color: var(--muted);
+    background: none;
+  }
+}
+
 /* where it is, read off a kilometre post */
 .wherebox {
   border-top: 1px solid var(--hair);
