@@ -24,13 +24,20 @@ Use these words, spelled this way, in code, comments and UI. If a new term comes
 
 | Term | Meaning | In code |
 |------|---------|---------|
-| Source | One live feed: the RailRadar API or the RailYatri scrape. Never named in the web app. | `SourceId` |
-| Check | One trip to the sources for one journey: one keyed call plus one scrape. | `runCheck()` |
+| Source | One live feed: the RailRadar API, the RailYatri scrape or the ConfirmTkt scrape. Never named in the web app. | `SourceId` |
+| Source family | A site or upstream. Two pages from one family count as one when rating confidence. `high` needs two families. | |
+| Run date | The journey date a request or a page is for. Every scrape asks for one. A page showing another date, or none, is discarded. | `journeyDate` |
+| Passed stop | A stop the train has already left or crossed, with an actual time. Only passed stops become events. | |
+| Wrong run | A page that shows a different run date from the one we asked for. Discarded, not counted as a failure. | `wrong_run` |
+| Failed read | A response we could not parse, or one with an unknown station code. The page is saved and a GitHub issue opens. | |
+| Blocked | A source that answered 401, 403 or 451, or showed a captcha. Stopped, then retried after 1, 3 and 7 days. | |
+| Searching | What the web app shows when a feed's update time is old. It means no news, not "not arrived". | |
+| Check | One trip to the sources for one journey: both scrapes, plus RailRadar on scored trips or as fallback. | `runCheck()` |
 | Event | One fact from a feed: arrived at, departed or passed a station at a time. | `SourceEvent` |
 | Event type | `ARR` arrived, `DEP` departed, `PASS` passed without stopping. | `EventType` |
 | Resolved event | The single event we trust after merging. | `ResolvedEvent` |
 | Chosen source | The source whose time we kept for a resolved event. | `chosenSource` |
-| Confidence score | 0 to 1. Trust of the sources that agree ÷ trust of every source asked. Internal. | `confidenceScore` |
+| Confidence score | 0 to 1. Trust of the sources that agree ÷ trust of every source asked for that event. Internal. | `confidenceScore` |
 | Merge audit | Database view showing every source's report, the chosen source and the confidence score. Interviews only. | `merge_audit` |
 | Nonsense | An event that breaks a rule in DATA_SOURCES.md, Step 2. Logged with a reason, never shown. | `RejectReason` |
 | Trust score | How reliable a source has been on scored trips. 0 to 1. Internal. | `trust` |
@@ -59,10 +66,10 @@ Use these words, spelled this way, in code, comments and UI. If a new term comes
 | Watcher | Someone with a journey open in a visible tab. No watcher, no checks. Many watchers cost the same as one. | `presence` |
 | Catch-up check | The one check made when the first watcher opens a journey. | `catchUpCheck()` |
 | Next check | When the scheduler will check a journey again. | `nextCheckAt` |
-| Demo reserve | Calls held back each month that only `--demo` may spend. | `demoReserve` |
+| Demo reserve | RailRadar calls held back each month, about 20. Only `--demo` or a fallback when both scrapes fail may spend them. | `demoReserve` |
 | Preflight | Checks before a demo: keys, calls left, API speed, trains running now. | `preflight` |
 | Demo picker | Picks a train moving now and due at a station soon. | `pickDemoTrain()` |
 | Scored trip | One full journey a month checked end to end, used to score sources. | `isScored` |
 | Truth | The final resolved events once a journey has ended. We only know true position at those events. | `truth` |
 | Journey score | How our windows and positions did over one finished journey. Kept after the journey is deleted. | `JourneyScore` |
-| Retention | Deleting a journey's data 24 h after it ends. | `purgeJourney()` |
+| Retention | Deleting a journey's data 24 h after it ends. Stored page bodies are cleared and the fetch rows stay. | `purgeJourney()` |
