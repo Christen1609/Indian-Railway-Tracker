@@ -13,10 +13,10 @@ import type { Track } from '../map/geometry';
 import { TRAIN_NAMES_HI } from '../map/route-12951';
 import {
   delayTone,
+  describeWhereabouts,
   formatAgo,
   formatClock,
   formatDelay,
-  formatPace,
   formatTimetableMinute,
   formatWindow,
 } from '../../lib/format';
@@ -48,6 +48,11 @@ export function StatusCard({ train, stops, stations, state, track, journeyDate, 
   const before = track.points[nextIdx - 1];
   const after = track.points[nextIdx];
   const destination = stops.at(-1);
+  const whereabouts = describeWhereabouts(
+    state,
+    nameOf(destination?.stationCode ?? ''),
+    before !== undefined && after !== undefined ? `Between ${before.name} and ${after.name}` : null,
+  ); // lead and km text, from describeWhereabouts
   useEffect(() => {
     if (hasMovedPages()) {
       headingRef.current?.focus();
@@ -94,18 +99,13 @@ export function StatusCard({ train, stops, stations, state, track, journeyDate, 
           <span>km</span>
         </div>
         <div className="wheretext">
-          {before !== undefined && after !== undefined && (
-            <p className="wherelead">
-              Between {before.name} and {after.name}
+          {whereabouts.lead !== null && <p className="wherelead">{whereabouts.lead}</p>}
+          {whereabouts.meta !== null && (
+            <p className="wheremeta">
+              {whereabouts.meta.prefix} <span className="nb mono">{whereabouts.meta.kmText}</span>,{' '}
+              {whereabouts.meta.paceText}
             </p>
           )}
-          <p className="wheremeta">
-            somewhere along{' '}
-            <span className="nb mono">
-              km {Math.round(state.loKm)}–{Math.round(state.hiKm)}
-            </span>
-            , {formatPace(state.pace).toLowerCase()}
-          </p>
         </div>
       </div>
       {isDue && destination.schedArrMin !== null && (

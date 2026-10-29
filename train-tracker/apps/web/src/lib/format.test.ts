@@ -1,6 +1,8 @@
+import type { TrainState } from '@train-tracker/core/types';
 import { describe, expect, it } from 'vitest';
 import {
   delayTone,
+  describeWhereabouts,
   formatAgo,
   formatClock,
   formatDelay,
@@ -118,5 +120,49 @@ describe('formatKm', () => {
     [123456, '1,23,456 km'],
   ])('%f', (distanceKm, expected) => {
     expect(formatKm(distanceKm)).toBe(expected);
+  });
+});
+
+describe('describeWhereabouts', () => {
+  const base: TrainState = {
+    journeyId: 'journey-1',
+    nextCheckAt: null,
+    updatedAt: '2026-10-27T11:30:00.000Z',
+    state: 'running',
+    km: 700,
+    loKm: 690.2,
+    hiKm: 710.4,
+    pace: 1.07,
+    delayMin: 5,
+    nextStation: 'RTM',
+    window: null,
+  };
+  const between = 'Between Kota and Ratlam';
+
+  it('names the destination once arrived', () => {
+    const arrived: TrainState = { ...base, state: 'arrived', loKm: 1388, hiKm: 1388 };
+    expect(describeWhereabouts(arrived, 'New Delhi', between)).toEqual({
+      lead: 'At New Delhi',
+      meta: null,
+    });
+  });
+
+  it('says "at km" when the range collapses to one kilometre', () => {
+    const point: TrainState = { ...base, loKm: 700.2, hiKm: 700.4 };
+    expect(describeWhereabouts(point, 'New Delhi', between)).toEqual({
+      lead: between,
+      meta: { prefix: 'at', kmText: 'km 700', paceText: '7% slower than the timetable' },
+    });
+  });
+
+  it('gives the range for a normal window', () => {
+    expect(describeWhereabouts(base, 'New Delhi', null)).toEqual({
+      lead: null,
+      meta: {
+        prefix: 'somewhere along',
+        kmText: 'km 690–710',
+        paceText: '7% slower than the timetable',
+      },
+    });
   });
 });

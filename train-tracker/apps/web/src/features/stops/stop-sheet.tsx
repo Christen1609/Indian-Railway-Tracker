@@ -60,6 +60,7 @@ export function StopSheet({ train, stops, stations, events, state, track, journe
   const haltsLeft = stops.filter((stop) => stop.km > state.km).length;
   const toGoKm = Math.max(0, (last?.km ?? 0) - state.km);
 
+  const isArrived = state.state === 'arrived';
   const rows: ReactNode[] = [];
   let hiddenCount = 0;
   let hiddenFromKm = 0;
@@ -81,7 +82,7 @@ export function StopSheet({ train, stops, stations, events, state, track, journe
   };
 
   track.points.forEach((point, i) => {
-    if (i === nextIdx) {
+    if (i === nextIdx && !isArrived) {
       flushHidden(state.km, true);
       rows.push(
         <li key="here" ref={hereRef} className="row here">
@@ -104,9 +105,9 @@ export function StopSheet({ train, stops, stations, events, state, track, journe
       hiddenCount++;
       return;
     }
-    flushHidden(point.km, i < nextIdx);
+    const isPast = isArrived || i < nextIdx;
+    flushHidden(point.km, isPast);
     lastKm = point.km;
-    const isPast = i < nextIdx;
     const isNext = state.nextStation === point.code;
     const arrAt = actual.get(`${point.code}:ARR`);
     const depAt = actual.get(`${point.code}:DEP`);
