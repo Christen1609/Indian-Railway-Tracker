@@ -1145,13 +1145,21 @@ a.brand {
 .landing-map {
   position: fixed;
   inset: 0;
-  pointer-events: none;
+  z-index: 0;
+  touch-action: pan-y;
 }
 .landing {
   position: fixed;
   inset: 0;
   overflow-x: hidden;
   overflow-y: auto;
+}
+.landing::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--bg) 94%, transparent) 0,
@@ -1160,6 +1168,9 @@ a.brand {
   );
 }
 .landing-col {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1170,6 +1181,7 @@ a.brand {
     64px;
 }
 .landing-col > * {
+  pointer-events: auto;
   min-width: 0;
   max-width: 100%;
 }
@@ -1290,18 +1302,23 @@ a.brand {
   }
 }
 @media (max-width: 760px) {
-  .landing {
+  .landing::before {
     background: linear-gradient(
       180deg,
       color-mix(in srgb, var(--bg) 94%, transparent) 0,
-      color-mix(in srgb, var(--bg) 80%, transparent) 55%,
-      color-mix(in srgb, var(--bg) 50%, transparent) 100%
+      color-mix(in srgb, var(--bg) 85%, transparent) 34%,
+      transparent 52%
     );
   }
   .landing-col {
     width: 100%;
     gap: 24px;
     padding-left: 16px;
+  }
+  .landing-attrib {
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
   }
   .sign-form input {
     font-size: 16px;

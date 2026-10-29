@@ -33,10 +33,10 @@ export function Landing() {
 
   return (
     <>
-      <Suspense fallback={null}>
-        <LandingMap />
-      </Suspense>
       <div className="landing">
+        <Suspense fallback={null}>
+          <LandingMap />
+        </Suspense>
         <main className="landing-col">
           <Brand />
           <section className="sign">
