@@ -1,6 +1,8 @@
-// Features: canonical codes, the seven nonsense rules, the normalize pass
+// Features: canonical codes, halt matching, the nonsense rules, the normalize pass
 
 import { sectionCap, sections } from '../estimate.js';
+import { matchHalt } from '../sources/stations.js';
+import type { OurHalt } from '../sources/stations.js';
 import { minutesBetween, timetableMinuteToUtc, toUtc } from '../time.js';
 import type { IsoDate, RejectReason, ResolvedEvent, SourceEvent, TimetableStop } from '../types.js';
 
@@ -15,6 +17,7 @@ export type NormalizeContext = {
   topSpeedKmh: number | null;
   learnedCaps?: ReadonlyMap<number, number>;
   confirmed: readonly ResolvedEvent[];
+  stations?: ReadonlyMap<string, { lat: number | null; lon: number | null }>;
 };
 
 /** Canonical station code: trimmed and uppercase */
@@ -57,6 +60,51 @@ function fastestStretchMin(ctx: NormalizeContext, fromSeq: number, toSeq: number
     seq = section.toSeq;
   }
   return seq === high ? fastest : null;
+}
+
+/** Our timetable's halts in route order, with the coordinates we hold for each */
+function ourHalts(ctx: NormalizeContext): OurHalt[] {
+  return ctx.stops
+    .filter((stop) => stop.schedArrMin !== null || stop.schedDepMin !== null)
+    .sort((one, other) => one.seq - other.seq)
+    .map((stop) => ({
+      code: stop.stationCode,
+      lat: ctx.stations?.get(stop.stationCode)?.lat ?? null,
+      lon: ctx.stations?.get(stop.stationCode)?.lon ?? null,
+    }));
+}
+
+/** Gives a halt row with an unknown code our code for it, or rejects it as unknown_halt */
+function withMatchedHalt(
+  event: SourceEvent,
+  events: readonly SourceEvent[],
+  halts: readonly OurHalt[],
+  stopByCode: ReadonlyMap<string, TimetableStop>,
+): SourceEvent {
+  if (event.isHalt !== true || event.haltOrder === undefined || stopByCode.has(event.stationCode)) {
+    return event;
+  }
+  const order = event.haltOrder;
+  /** The known code of the halt row beside this one in the same response */
+  const beside = (haltOrder: number): string | null =>
+    events.find(
+      (other) =>
+        other.rawFetchId === event.rawFetchId &&
+        other.haltOrder === haltOrder &&
+        stopByCode.has(other.stationCode),
+    )?.stationCode ?? null;
+  const matched = matchHalt(
+    {
+      haltOrder: order,
+      ...(event.lat === undefined ? {} : { lat: event.lat }),
+      ...(event.lon === undefined ? {} : { lon: event.lon }),
+    },
+    halts,
+    { prev: beside(order - 1), next: beside(order + 1) },
+  ); // our code for it, from matchHalt
+  return matched === null
+    ? { ...event, rejected: 'unknown_halt' }
+    : { ...event, stationCode: matched };
 }
 
 /** Why one event is nonsense, or null when it survives every rule */
@@ -133,10 +181,13 @@ export function normalizeEvents(
   ctx: NormalizeContext,
 ): SourceEvent[] {
   const stopByCode = new Map(ctx.stops.map((stop) => [stop.stationCode, stop]));
-  const named = events.map((event) => ({
+  const coded = events.map((event) => ({
     ...event,
     stationCode: canonicalCode(event.stationCode), // canonical code, from canonicalCode
   }));
+  const halts = ourHalts(ctx); // our halts, from ourHalts
+  // halt rows with unknown codes matched or rejected, from withMatchedHalt
+  const named = coded.map((event) => withMatchedHalt(event, coded, halts, stopByCode));
 
   const arrivalAt = new Map<string, string>();
   for (const event of named) {
@@ -152,6 +203,9 @@ export function normalizeEvents(
 
   return named.map((event) => {
     // the rule it broke, from rejectionFor
+    if (event.rejected !== undefined) {
+      return event;
+    }
     const reason = rejectionFor(event, ctx, stopByCode, arrivalAt);
     return reason === null ? event : { ...event, rejected: reason };
   });

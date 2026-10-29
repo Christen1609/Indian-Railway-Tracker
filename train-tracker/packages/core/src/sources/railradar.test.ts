@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { canonicalStationCode, parseRailRadarLive } from './railradar.js';
+import { parseRailRadarLive } from './railradar.js';
 import type { RawFetch } from '../types.js';
 
 const FIXTURES = join(import.meta.dirname, '../../../../fixtures/railradar');
@@ -45,6 +45,15 @@ describe('parseRailRadarLive on the real 12951 response', () => {
     expect(real.events.filter((event) => event.stationCode === 'BCT')).toEqual([]);
   });
 
+  it('maps every halt row to one of the 8 stations of 12951', () => {
+    const ours = new Set(['BCT', 'BVI', 'ST', 'BRC', 'RTM', 'NAD', 'KOTA', 'NDLS']);
+    const halts = real.events.filter((event) => event.isHalt === true);
+    expect(halts.length).toBeGreaterThan(0);
+    for (const event of halts) {
+      expect(ours.has(event.stationCode)).toBe(true);
+    }
+  });
+
   it('emits an arrival and a departure where both are reported', () => {
     expect(real.events.filter((event) => event.stationCode === 'BVI')).toEqual([
       {
@@ -56,6 +65,8 @@ describe('parseRailRadarLive on the real 12951 response', () => {
         at: '2026-10-21T12:06:18.000Z',
         fetchedAt: FETCHED_AT,
         rawFetchId: RAW_ID,
+        isHalt: true,
+        haltOrder: 1,
       },
       {
         source: 'railradar',
@@ -66,6 +77,8 @@ describe('parseRailRadarLive on the real 12951 response', () => {
         at: '2026-10-21T12:07:29.000Z',
         fetchedAt: FETCHED_AT,
         rawFetchId: RAW_ID,
+        isHalt: true,
+        haltOrder: 1,
       },
     ]);
   });
@@ -81,6 +94,8 @@ describe('parseRailRadarLive on the real 12951 response', () => {
         at: '2026-10-21T21:56:46.000Z',
         fetchedAt: FETCHED_AT,
         rawFetchId: RAW_ID,
+        isHalt: true,
+        haltOrder: 6,
       },
     ]);
   });
@@ -96,6 +111,8 @@ describe('parseRailRadarLive on the real 12951 response', () => {
         at: '2026-10-22T02:57:47.000Z',
         fetchedAt: FETCHED_AT,
         rawFetchId: RAW_ID,
+        isHalt: true,
+        haltOrder: 7,
       },
     ]);
   });
@@ -186,18 +203,6 @@ describe('parseRailRadarLive on responses it must survive', () => {
   it('never throws on any of them', () => {
     for (const body of ['', 'null', '[]', '{"success":true}', '{"data":null}']) {
       expect(() => parseRailRadarLive(fetched(body), RAW_ID)).not.toThrow();
-    }
-  });
-});
-
-describe('canonicalStationCode', () => {
-  it('rewrites the one code RailRadar disagrees on', () => {
-    expect(canonicalStationCode('MMCT')).toBe('BCT');
-  });
-
-  it('leaves every other code alone', () => {
-    for (const code of ['BVI', 'ST', 'BRC', 'RTM', 'NAD', 'KOTA', 'NDLS']) {
-      expect(canonicalStationCode(code)).toBe(code);
     }
   });
 });

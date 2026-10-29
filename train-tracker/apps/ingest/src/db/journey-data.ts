@@ -33,6 +33,10 @@ const StopRows = z.array(
   }),
 );
 
+const StationRows = z.array(
+  z.object({ code: z.string().min(1), lat: z.number().nullable(), lon: z.number().nullable() }),
+);
+
 const TrainRows = z.array(z.object({ top_speed_kmh: z.number().int().nullable() }));
 
 const CapRows = z.array(
@@ -257,6 +261,16 @@ export async function timetableFor(
     schedDepMin: row.sched_dep,
     km: row.km,
   }));
+}
+
+/** The coordinates we hold for some stations, by code */
+export async function stationPointsFor(
+  codes: readonly string[],
+  config: DbConfig,
+): Promise<Map<string, { lat: number | null; lon: number | null }>> {
+  const query = `stations?code=in.(${codes.join(',')})&select=code,lat,lon`;
+  const rows = StationRows.parse(await readRows(query, config)); // rows, from readRows
+  return new Map(rows.map((row) => [row.code, { lat: row.lat, lon: row.lon }]));
 }
 
 /** The top speed we hold for a train, null when the reference data does not say */
