@@ -21,6 +21,7 @@ import {
   formatWindow,
 } from '../../lib/format';
 import { hasMovedPages } from '../../lib/navigation';
+import { isAwaitingNews, pickSearchingWord } from './searching';
 
 type Props = {
   train: Train;
@@ -90,6 +91,17 @@ export function StatusCard({ train, stops, stations, state, track, journeyDate, 
           </div>
           {state.window !== null && (
             <div className="nwin mono">{formatWindow(journeyDate, state.window)}</div>
+          )}
+          {isAwaitingNews(state, now) && (
+            <p className="searching">
+              <span className="sr-only">Waiting for the next update</span>
+              <span className="sglyph" aria-hidden="true">
+                ✻
+              </span>
+              <span className="sword" aria-hidden="true">
+                {pickSearchingWord(now)}…
+              </span>
+            </p>
           )}
         </div>
       )}
