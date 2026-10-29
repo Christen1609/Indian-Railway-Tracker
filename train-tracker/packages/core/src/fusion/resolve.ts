@@ -24,12 +24,22 @@ export const TRUST_PRIOR: Trust = new Map<SourceId, number>([
   ['railyatri_scrape', 0.5],
 ]);
 
+export type Families = ReadonlyMap<SourceId, string>;
+
+export const SOURCE_FAMILY: Families = new Map<SourceId, string>([
+  ['railradar', 'railradar'],
+  ['railyatri_scrape', 'railyatri'],
+]);
+
+export type SourceRead = { source: SourceId; fetchedAt: IsoUtc; isSuccess: boolean };
+
 export type ResolveInput = {
   journeyId: string;
   events: readonly SourceEvent[];
-  asked: readonly SourceId[];
+  reads: readonly SourceRead[];
   resolvedAt: IsoUtc;
   trust?: Trust;
+  families?: Families;
 };
 
 type Report = { source: SourceId; at: IsoUtc; fetchedAt: IsoUtc };
@@ -41,12 +51,26 @@ function trustOf(source: SourceId, trust: Trust): number {
   return trust.get(source) ?? 0;
 }
 
-/** The confidence level a score earns, which one source alone can never carry to high */
-export function confidenceOf(score: number, sources: number): Confidence {
+/** How many independent families stand behind some sources, each unlisted source its own */
+export function familyCount(
+  sources: readonly SourceId[],
+  families: Families = SOURCE_FAMILY,
+): number {
+  return new Set(sources.map((source) => families.get(source) ?? source)).size;
+}
+
+/** The sources read successfully at or after a moment, which is when they could have known */
+export function askedSince(from: IsoUtc, reads: readonly SourceRead[]): SourceId[] {
+  const heard = reads.filter((read) => read.isSuccess && minutesBetween(from, read.fetchedAt) >= 0);
+  return [...new Set(heard.map((read) => read.source))];
+}
+
+/** The confidence level a score earns, which one family alone can never carry to high */
+export function confidenceOf(score: number, families: number): Confidence {
   if (score < MEDIUM_FROM) {
     return 'low';
   }
-  return score >= HIGH_FROM && sources > ONE_SOURCE ? 'high' : 'medium';
+  return score >= HIGH_FROM && families > ONE_SOURCE ? 'high' : 'medium';
 }
 
 /** Surviving events gathered by the station and the kind of event they report */
@@ -110,6 +134,13 @@ function topTrust(cluster: readonly Report[], trust: Trust): number {
   return Math.max(...cluster.map((report) => trustOf(report.source, trust)));
 }
 
+/** The earliest time any report gives */
+function earliestAt(reports: readonly Report[]): IsoUtc {
+  return reports
+    .map((report) => report.at)
+    .reduce((earliest, when) => (minutesBetween(when, earliest) > 0 ? when : earliest));
+}
+
 /** When a cluster was first seen */
 function seenAt(cluster: readonly Report[]): IsoUtc {
   return cluster
@@ -145,14 +176,16 @@ function chosenIn(cluster: readonly Report[], trust: Trust): Report {
 /** One event per station and type: the time we keep, who said it, and how sure we are */
 export function resolveEvents(input: ResolveInput): ResolvedEvent[] {
   const trust = input.trust ?? TRUST_PRIOR;
-  const askedTrust = [...new Set(input.asked)].reduce(
-    (total, source) => total + trustOf(source, trust),
-    0,
-  );
-  assert(askedTrust > 0, `at least one asked source we rate, got [${input.asked.join()}]`);
-
   return groupsOf(input.events).map((group) => {
     // each source's latest word, from latestPerSource
+    const asked = [
+      ...new Set([
+        ...askedSince(earliestAt(group.reports), input.reads),
+        ...group.reports.map((r) => r.source),
+      ]),
+    ]; // sources that could have known, from askedSince
+    const askedTrust = asked.reduce((total, source) => total + trustOf(source, trust), 0);
+    assert(askedTrust > 0, `at least one asked source we rate, got [${asked.join()}]`);
     const reports = latestPerSource(group.reports);
     const won = winnerOf(clustersOf(reports), trust); // the cluster we keep, from winnerOf
     const chosen = chosenIn(won, trust); // whose time we keep, from chosenIn
@@ -166,7 +199,7 @@ export function resolveEvents(input: ResolveInput): ResolvedEvent[] {
       type: group.type,
       at: chosen.at,
       confidenceScore,
-      confidence: confidenceOf(confidenceScore, sources.length), // the level it earns, from confidenceOf
+      confidence: confidenceOf(confidenceScore, familyCount(sources, input.families)), // the level it earns, from confidenceOf
       chosenSource: chosen.source,
       sources,
       resolvedAt: input.resolvedAt,

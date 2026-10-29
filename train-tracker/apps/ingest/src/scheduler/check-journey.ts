@@ -20,16 +20,16 @@ import {
   saveResolvedEvents,
   saveSourceEvents,
   saveTrainState,
+  sourceEventsFor,
   timetableFor,
   topSpeedFor,
 } from '../db/journey-data.js';
-import { insertRawFetch, rawFetchRow } from '../db/raw-fetches.js';
+import { insertRawFetch, rawFetchRow, readsFor } from '../db/raw-fetches.js';
 import { saveHealth } from '../db/source-health.js';
 import { log } from '../log.js';
 import type { Config } from '../config.js';
 
 const RAILRADAR: SourceId = 'railradar';
-const ASKED: SourceId[] = [RAILRADAR];
 const NO_JOURNEY = null;
 
 export type CheckInput = {
@@ -124,11 +124,15 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
   });
   await saveSourceEvents(normalized, journey.id, config.db);
 
+  const [events, reads] = await Promise.all([
+    sourceEventsFor({ id: journey.id, trainNumber, journeyDate }, config.db), // every surviving event so far, from sourceEventsFor
+    readsFor(journey.id, config.db), // every read so far, from readsFor
+  ]);
   // one event per station and type, from resolveEvents
   const resolved = resolveEvents({
     journeyId: journey.id,
-    events: normalized,
-    asked: ASKED,
+    events,
+    reads,
     resolvedAt: now,
   });
   await saveResolvedEvents(resolved, config.db);

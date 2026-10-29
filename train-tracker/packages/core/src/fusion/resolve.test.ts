@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EventType, RejectReason, SourceEvent, SourceId } from '../types.js';
-import { TRUST_PRIOR, confidenceOf, resolveEvents } from './resolve.js';
+import { TRUST_PRIOR, askedSince, confidenceOf, resolveEvents } from './resolve.js';
+import type { SourceRead } from './resolve.js';
 
 const JOURNEY_ID = 'j1';
 const JOURNEY_DATE = '2026-10-21';
@@ -26,10 +27,20 @@ function said(one: Said, type: EventType = 'ARR'): SourceEvent {
 
 /** The one event that comes out of resolving what these sources said */
 function resolveOne(events: readonly SourceEvent[], asked: readonly SourceId[] = BOTH) {
+  return resolveOneWith(events, readsOf(asked));
+}
+
+/** Successful reads of these sources, taken when the events were fetched */
+function readsOf(asked: readonly SourceId[], fetchedAt: string = RESOLVED_AT): SourceRead[] {
+  return asked.map((source) => ({ source, fetchedAt, isSuccess: true }));
+}
+
+/** The one event that comes out of resolving with these reads */
+function resolveOneWith(events: readonly SourceEvent[], reads: readonly SourceRead[]) {
   const resolved = resolveEvents({
     journeyId: JOURNEY_ID,
     events,
-    asked,
+    reads,
     resolvedAt: RESOLVED_AT,
   }); // one event per station and type, from resolveEvents
   expect(resolved.length).toBe(1);
@@ -160,7 +171,7 @@ describe('resolveEvents, what it refuses to count', () => {
       events: [
         said({ source: 'railradar', at: '2026-10-21T15:49:00.000Z', rejected: 'backwards' }),
       ],
-      asked: BOTH,
+      reads: readsOf(BOTH),
       resolvedAt: RESOLVED_AT,
     });
     expect(resolved).toEqual([]);
@@ -236,7 +247,7 @@ describe('resolveEvents, one event per station and type', () => {
         said({ source: 'railradar', at: '2026-10-21T15:49:00.000Z' }, 'ARR'),
         said({ source: 'railradar', at: '2026-10-21T15:59:00.000Z' }, 'DEP'),
       ],
-      asked: BOTH,
+      reads: readsOf(BOTH),
       resolvedAt: RESOLVED_AT,
     });
     expect(resolved.map((one) => one.type)).toEqual(['ARR', 'DEP']);
@@ -250,6 +261,62 @@ describe('resolveEvents, one event per station and type', () => {
     const resolved = resolveOne([said({ source: 'railradar', at: '2026-10-21T15:49:00.000Z' })]);
     expect(resolved?.journeyId).toBe(JOURNEY_ID);
     expect(resolved?.resolvedAt).toBe(RESOLVED_AT);
+  });
+});
+
+const EARLIER = '2026-10-21T15:00:00.000Z';
+const LATER = '2026-10-21T17:00:00.000Z';
+const ARRIVED = '2026-10-21T15:49:00.000Z';
+
+describe('askedSince', () => {
+  it('counts a successful read at or after the moment, not a failed or earlier one', () => {
+    const reads: SourceRead[] = [
+      { source: 'railradar', fetchedAt: ARRIVED, isSuccess: true },
+      { source: 'railyatri_scrape', fetchedAt: LATER, isSuccess: false },
+    ];
+    expect(askedSince(ARRIVED, reads)).toEqual(['railradar']);
+    expect(askedSince(LATER, reads)).toEqual([]);
+  });
+});
+
+describe('resolveEvents, over a whole journey', () => {
+  it('keeps high when a later check asked only one source', () => {
+    const resolved = resolveOneWith(
+      [
+        said({ source: 'railradar', at: ARRIVED, fetchedAt: RESOLVED_AT }),
+        said({ source: 'railyatri_scrape', at: ARRIVED, fetchedAt: RESOLVED_AT }),
+        said({ source: 'railyatri_scrape', at: ARRIVED, fetchedAt: LATER }),
+      ],
+      [...readsOf(BOTH), ...readsOf(['railyatri_scrape'], LATER)],
+    );
+    expect(resolved?.confidence).toBe('high');
+    expect(resolved?.confidenceScore).toBe(1);
+  });
+
+  it('never calls two sources of one family high', () => {
+    const resolved = resolveEvents({
+      journeyId: JOURNEY_ID,
+      events: [
+        said({ source: 'railradar', at: ARRIVED }),
+        said({ source: 'railyatri_scrape', at: ARRIVED }),
+      ],
+      reads: readsOf(BOTH),
+      resolvedAt: RESOLVED_AT,
+      families: new Map<SourceId, string>([
+        ['railradar', 'one site'],
+        ['railyatri_scrape', 'one site'],
+      ]),
+    });
+    expect(resolved[0]?.confidenceScore).toBe(1);
+    expect(resolved[0]?.confidence).toBe('medium');
+  });
+
+  it('does not count a source read only before the train got there', () => {
+    const resolved = resolveOneWith(
+      [said({ source: 'railradar', at: ARRIVED })],
+      [...readsOf(['railradar']), ...readsOf(['railyatri_scrape'], EARLIER)],
+    );
+    expect(resolved?.confidenceScore).toBe(1);
   });
 });
 
