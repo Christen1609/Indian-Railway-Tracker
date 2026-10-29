@@ -24,8 +24,9 @@ Use these words, spelled this way, in code, comments and UI. If a new term comes
 
 | Term | Meaning | In code |
 |------|---------|---------|
-| Source | One live feed: the RailRadar API, the RailYatri scrape or the ConfirmTkt scrape. Never named in the web app. | `SourceId` |
-| Source family | A site or upstream. Two pages from one family count as one when rating confidence. `high` needs two families. | |
+| Source | One live feed: the RailRadar API or a page scrape (Goibibo, ConfirmTkt, Travelkhana, RailYatri, Railmitra). Never named in the web app. | `SourceId` |
+| Source family | One upstream. `ntes_copy` (ConfirmTkt, Goibibo, Travelkhana, Railmitra), `railyatri` and `railradar`. Two pages from one family count as one when rating confidence. `high` needs two families. | |
+| Unknown halt | A row a source marks as a halt, with a code we cannot map to one of our stops. Rejected with a loud reason. | `unknown_halt` |
 | Run date | The journey date a request or a page is for. Every scrape asks for one. A page showing another date, or none, is discarded. | `journeyDate` |
 | Passed stop | A stop the train has already left or crossed, with an actual time. Only passed stops become events. | |
 | Wrong run | A page that shows a different run date from the one we asked for. Discarded, not counted as a failure. | `wrong_run` |
