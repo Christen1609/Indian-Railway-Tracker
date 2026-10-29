@@ -353,13 +353,14 @@ input:focus-visible {
 }
 .kmpost {
   flex: none;
-  width: 48px;
+  min-width: 48px;
+  box-sizing: border-box;
   background: var(--km);
   color: #15120a;
   border: 2px solid #15120a;
   border-radius: 3px;
   text-align: center;
-  padding: 4px 2px 3px;
+  padding: 4px 5px 3px;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.32);
 }
 .kmpost b {
@@ -892,7 +893,7 @@ input:focus-visible {
     padding-top: 9px;
   }
   .kmpost {
-    width: 42px;
+    min-width: 42px;
   }
   .cam {
     margin-top: 0;
