@@ -8,7 +8,7 @@ import {
   timetableMinuteToUtc,
   utcToTimetableMinute,
 } from '@train-tracker/core/time';
-import type { ArrivalWindow, IsoDate, IsoUtc } from '@train-tracker/core/types';
+import type { ArrivalWindow, IsoDate, IsoUtc, TrainState } from '@train-tracker/core/types';
 
 const IST_ZONE = 'Asia/Kolkata';
 const MINUTES_PER_HOUR = 60;
@@ -109,4 +109,31 @@ export function formatPace(pace: number): string {
 /** Distance in whole kilometres with Indian digit grouping */
 export function formatKm(distanceKm: number): string {
   return `${Math.round(distanceKm).toLocaleString('en-IN')} km`;
+}
+
+type Whereabouts = {
+  lead: string | null;
+  meta: { prefix: string; kmText: string; paceText: string } | null;
+};
+
+/** Where the train is, in words, for the status card */
+export function describeWhereabouts(
+  state: TrainState,
+  destinationName: string,
+  betweenText: string | null,
+): Whereabouts {
+  if (state.state === 'arrived') {
+    return { lead: `At ${destinationName}`, meta: null };
+  }
+  const loKm = Math.round(state.loKm);
+  const hiKm = Math.round(state.hiKm);
+  const isPoint = loKm === hiKm;
+  return {
+    lead: betweenText,
+    meta: {
+      prefix: isPoint ? 'at' : 'somewhere along',
+      kmText: isPoint ? `km ${loKm}` : `km ${loKm}–${hiKm}`,
+      paceText: formatPace(state.pace).toLowerCase(), // pace in words, from formatPace
+    },
+  };
 }
