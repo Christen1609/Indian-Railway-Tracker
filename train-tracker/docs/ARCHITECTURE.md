@@ -9,6 +9,7 @@ flowchart LR
   subgraph Sources
     RR[RailRadar API]
     SC[RailYatri scrape]
+    CT[ConfirmTkt scrape]
   end
   subgraph ingest["apps/ingest (Node worker)"]
     SCH[Window scheduler + quota guard] --> AD[Adapters]
@@ -22,7 +23,7 @@ flowchart LR
     RE[(resolved_events)]
     TS[(train_state)]
   end
-  RR & SC --> AD
+  RR & SC & CT --> AD
   AD --> RAW
   RAW --> PA
   NV --> SE
@@ -35,9 +36,9 @@ flowchart LR
 One check for one journey:
 
 1. The scheduler sees that a watched journey's arrival window is open, or it is running late.
-2. The adapter fetches. The raw response is saved to `raw_fetches` whatever happens next.
+2. The adapters fetch, the two scrapes on every check and RailRadar on scored trips or as fallback. Each asks for the journey's run date. The raw response is saved to `raw_fetches` whatever happens next. A page for another run date is discarded before it can create or match a journey.
 3. Parse, normalize, filter nonsense. Survivors go to `source_events`.
-4. The resolver re-runs over all of the journey's events and rewrites `resolved_events`.
+4. The resolver re-runs over all of the journey's events, not only this check's, and rewrites `resolved_events`.
 5. Pace, windows and position are computed and written to `train_state`.
 6. Supabase Realtime pushes the new `train_state` to every open browser.
 
@@ -254,7 +255,7 @@ raw_fetches (
   source       text not null,
   url          text not null,
   status       smallint not null,
-  body         text,
+  body         text,                  -- scrapes: the train-data block only. Cleared by retention, the row stays
   error        text,
   fetched_at   timestamptz not null,
   latency_ms   integer
@@ -367,8 +368,9 @@ No journey data outlives its journey by more than a day.
 
 1. A journey becomes `arrived` when its final `ARR` resolves, or 2 h after its timetabled arrival.
 2. Jobs write `journey_scores`, `section_caps` and, for scored trips, `source_scores`.
-3. 24 h later, retention deletes that journey's rows from `raw_fetches`, `source_events`, `resolved_events`, `estimate_log` and `train_state`.
-4. `journeys`, `journey_scores`, `source_scores` and `section_caps` stay. They are a few numbers per journey.
+3. 24 h later, retention deletes that journey's rows from `source_events`, `resolved_events`, `estimate_log` and `train_state`. It clears `raw_fetches.body` and keeps the rows.
+4. `journeys`, `journey_scores`, `source_scores`, `section_caps` and the `raw_fetches` rows stay. They are a few numbers per journey. The kept rows are what the monthly RailRadar call count reads.
+5. Cleanup runs when the worker exits.
 
 ### Access
 
@@ -406,6 +408,16 @@ Most bugs in this project will be time bugs.
 | Train and zone drawn with MapLibre layers, no deck.gl | The train is a `fill-extrusion` layer and the zone is a line layer. One map library, no model file to load or repaint. Decided 28 Oct 2026. |
 | Mapterhorn for terrain | Keyless elevation tiles that work with MapLibre 3D terrain and hillshade. Decided 28 Oct 2026. |
 | NASA GIBS globe on the landing page | Keyless imagery, so the landing page needs no account or key. Decided 29 Oct 2026. |
+| Three sources: two scrapes and RailRadar | RailYatri and ConfirmTkt page scrapes carry every check. RailRadar runs on scored trips and as fallback, about 6 calls a trip with about 20 a month in reserve. When its budget is spent the worker tracks on the scrapes. Replaces "RailRadar on every check". Decided 30 Oct 2026. |
+| Always ask for a run date | A page for the wrong run would make the worker follow a train that has not started. RailYatri ignores a date, ConfirmTkt takes `?Date=`. Pages with another date or none are discarded. Decided 30 Oct 2026. |
+| Only passed stops become events | Predictions from a site are not evidence. We compute our own windows and delay. Decided 30 Oct 2026. |
+| Scrape politeness: 1 request a minute across all sites, 5 min per URL | Low volume, honest user agent. `robots.txt` fetches count. Decided 30 Oct 2026. |
+| Blocked source retries by itself after 1, 3, then 7 days | Supersedes "only a human resets it". No step may need the owner. Decided 30 Oct 2026. |
+| Wait 7 min after a window closes before "running late"; a stalled feed shows "searching" | The scrapes run about 7 min behind. Decided 30 Oct 2026. |
+| Confidence uses source families | `high` needs two different families. The resolver runs over all of a journey's events. Decided 30 Oct 2026. |
+| Failed reads repair themselves | The worker saves the page and opens a GitHub issue. An agent fixes the parser with a fixture test. The fix merges when tests pass. The worker pulls the latest passing code at its daily start. Decided 30 Oct 2026. |
+| Retention clears page bodies, keeps the rows | The RailRadar call count reads `raw_fetches` and was under-counting after a sweep. Decided 30 Oct 2026. |
+| No Python and no LLM at runtime. Station boards deferred | TypeScript and zod are enough for JSON in the page. No board is server-rendered. LLMs repair parsers at dev time only. Decided 30 Oct 2026. |
 | Frontend waits for live data, no dev stub | The first live page (12951) was built on real `train_state` rows from Supabase. Hard rule 2 held and no stub was written. Decided 28 Oct 2026. |
 | Vercel Hobby for the web app | Free, no card. A static Vite build, served at indian-railway-tracker.vercel.app. Replaced the old `site/` prototype, which was removed. Decided 29 Oct 2026. |
 | zod for every external response | Source shapes change without warning. |
@@ -415,7 +427,7 @@ Most bugs in this project will be time bugs.
 
 | Question | Options | Lean |
 |----------|---------|------|
-| Where does the ingest worker run, for free? | A free Node host vs Supabase Edge Function with pg_cron | Check free tiers. Must not need a card. Until decided, the worker runs on the developer's machine, started by hand: `pnpm --filter @train-tracker/ingest start 12951`. |
+| Where does the ingest worker run, for free? | A free Node host vs Supabase Edge Function with pg_cron | Check free tiers. Must not need a card. A free host comes after a probe from its IP shows the scrapes are not blocked. Until then the worker runs on the owner's PC. A scheduled task starts it each evening and keeps the PC awake until arrival. |
 | Window weights and buffer | 0.6/0.4, 5 min or 5% | Starting values. Tune from journey scores. |
 
 When an open question is decided, move it to Decided with one line of why. Do not delete history.

@@ -4,14 +4,17 @@ Where the data comes from, when we check it, and how we decide when sources disa
 
 There is no official public API for live Indian train positions. Indian Railways tracks locomotives by GPS and feeds NTES, but does not publish an API. Every source below sits on top of NTES in some way.
 
-Everything here is free. Nothing may need a card. Last checked: 21 Oct 2026. Recheck quotas before each milestone.
+Everything here is free. Nothing may need a card. Last checked: 30 Oct 2026. Recheck quotas before each milestone.
+
+Three sources feed the resolver. Two page scrapes (RailYatri and ConfirmTkt) are the main sources and carry every check. RailRadar runs on scored trips and as the fallback when a scrape fails. When RailRadar's budget is spent, the worker keeps tracking on the scrapes. Decided 30 Oct 2026.
 
 ## Live sources
 
 | ID | Source | Auth | Env var | Free quota | Use it for | Risk |
 |----|--------|------|---------|-----------|------------|------|
-| `railradar` | RailRadar API, `https://api.railradar.in/v1` | `Authorization: Bearer <key>` or `X-API-Key` | `RAILRADAR_API_KEY` | 100 requests/month (sandbox, no card) | The only keyed source. Per-train live status and the snapshot. | Snapshot endpoint is marked legacy. |
-| `railyatri_scrape` | RailYatri live status page, `https://www.railyatri.in/live-train-status/<slug>` | None | None | Self-imposed: 1 request per minute total | Free second opinion on every check. Last-resort fallback. | HTML can change any day. Scraping may breach their terms. Personal demo use only. |
+| `railradar` | RailRadar API, `https://api.railradar.in/v1` | `Authorization: Bearer <key>` or `X-API-Key` | `RAILRADAR_API_KEY` | 100 requests/month (sandbox, no card) | Scored trips and fallback. Per-train live status and the snapshot. About 6 calls a trip, about 20 a month held in reserve. | Snapshot endpoint is marked legacy. |
+| `railyatri_scrape` | RailYatri live status page, `https://www.railyatri.in/live-train-status/<number>` | None | None | Self-imposed: 1 request per minute across all scrape sites | Main source. Every check. | HTML can change any day. Shows only the current run, so it cannot cover a train after midnight. |
+| `confirmtkt_scrape` | ConfirmTkt running status page, `https://www.confirmtkt.com/train-running-status/<number>?Date=DD-Mon-YYYY` | None | None | Same shared limit | Main source. Every check. Covers the run that started yesterday, through the date parameter. | HTML can change any day. Not built yet. |
 
 RailRadar endpoints we use:
 
@@ -30,6 +33,18 @@ What the first two real responses showed, 22 Oct 2026:
 - **The live endpoint takes no journey date.** `GET /v1/trains/{number}/live` returns the current or most recent run and names it in `startDate`. There is no way to ask for a specific past date.
 - **Station codes do not always match the reference data.** RailRadar calls Mumbai Central `MMCT`; datameet and our `stations` table call it `BCT`. Each adapter maps its own source's codes to ours.
 
+### What the scrapes showed
+
+Two live tests, 29 and 30 Oct 2026. Pages saved as fixtures.
+
+- **RailYatri** is rendered on the server. The live data is JSON inside the page, under `__NEXT_DATA__` then `ltsData`. Passed stops (`previous_stations`) and upcoming stops (`upcoming_stations`) are separate arrays. No browser is needed.
+- **ConfirmTkt** is rendered on the server, with an inline `var data =` JSON block. Passed halts carry a green tick and an actual time. Upcoming halts show an expected time. It has a date selector from 3 days back to tomorrow.
+- **Both lag by about 7 minutes.** ConfirmTkt's `Last Updated` was about 10 minutes old.
+- **RailYatri ignores a date parameter.** At 04:33 IST on 30 Oct it showed the 30 Oct run, not started. The 29 Oct run, still running, was missing.
+- **ConfirmTkt with `?Date=29-Oct-2026`** at the same time showed the 29 Oct run live. That closes the midnight gap.
+- **RailYatri's delay label disagreed with its own times.** That is why we compute our own delay.
+- etrain's live pages and station boards are a shell filled by JavaScript. ixigo's robots.txt disallows everything. runningstatus.in returns 403. None of them is a source.
+
 ### Getting keys
 
 Someone has to sign up by hand. AI can't do it for you.
@@ -42,7 +57,7 @@ Someone has to sign up by hand. AI can't do it for you.
 
 **RapidAPI IRCTC1**, dropped 22 Oct 2026. It was meant to be the failover key and the third opinion on scored trips. Two things killed it. The free Basic plan is 10 requests a month, not the 20 we had assumed, which is less than the 25 one scored 12951 trip costs, so it could never have scored a trip. And its pricing FAQ has an entry titled "Why Do You Require A Credit Card For A Freemium API?", so a card may be required even at $0, which hard rule 1 forbids.
 
-That leaves one keyed source and one scrape. The consequences are written into the sections below: there is nothing to fail over to, and the best confidence a single-source confirmation can reach is `medium`.
+That left one keyed source and one scrape. Adding ConfirmTkt on 30 Oct 2026 made two scrapes. Two scrapes from different sites can agree to `high`. See Step 5.
 
 ## Static sources
 
@@ -66,6 +81,17 @@ The datameet data has no visible update date. Treat it as old. Cross-check any t
 | NTES directly | The upstream everyone wraps. The most likely to block us. |
 | Google Where is My Train | No public API. |
 | Multiple accounts or rotating keys | Breaks provider terms. Keys get banned, maybe mid-demo. |
+| Python scrapers | A second toolchain and test runner. The data is JSON in the page, so `JSON.parse` and zod are enough. |
+| An LLM at runtime | Paid or capped, not repeatable, and it can invent a believable wrong "actual" time. LLMs are used at dev time only, to repair parsers. |
+| Station boards | Deferred. None rendered on the server was found. A per-train page lists every passed stop, so a missed check costs nothing. Revisit only if a server-rendered board appears, and use it only at the window station. |
+
+## Run date
+
+Always ask for a specific run date. A page for the wrong run is the worst bug here: the worker would follow a train that has not started and drop the one that is running.
+
+- Every scrape request names the run date (`?Date=DD-Mon-YYYY` on ConfirmTkt). A source that cannot take a date is used only for the run it currently shows.
+- Read the date on the page. Discard any page that shows another date, or none, before a journey is created or matched. The adapter reports it as `wrong_run`. It is not a failure and does not count toward the circuit.
+- After midnight IST the train is still the journey that left origin before midnight. ConfirmTkt with the old date covers it. RailRadar is asked only if that fails, once per remaining window.
 
 ## When we check
 
@@ -82,7 +108,7 @@ We never check on a timer. We check only when something is due.
 | Between stations, window not open yet | No checks. The estimate moves the dot. |
 | Arrival window opens | First check. |
 | Window open, arrival not reported | Check every 5 min until the window closes. |
-| Window closed, arrival not reported | Mark late. Show "Running late. Updating soon." Push the window. Keep checking at 5, 5, 10, 10, then every 15 min. |
+| Window closed, arrival not reported | Wait 7 min for the feeds to catch up. Then mark late, show "Running late. Updating soon." and push the window. Keep checking at 5, 5, 10, 10, then every 15 min. |
 | Arrival confirmed | Lock the delay, update pace, set the next window. No checks until it opens. |
 | Halt at a station | Not checked. Departure is inferred from the halt and confirmed by the next check, if the reply includes it. |
 | Final arrival confirmed | Stop. |
@@ -99,12 +125,20 @@ There is no check in the middle of long sections. On Kota to New Delhi that mean
 - Last watcher leaves: checks stop after a 2 min grace period, so a page refresh doesn't trigger a new catch-up check.
 - The catch-up check is skipped if the journey was updated within the last check interval.
 - Many watchers on one train cost the same as one. The server checks once, and Realtime pushes the update to every screen.
-- Different trains each cost their own checks. The quota guard caps the total. Over budget, only the free scrape is used.
+- Different trains each cost their own checks. The quota guard caps the total RailRadar calls. Over budget, the scrapes carry on alone.
 
 ### What one check does
 
-1. Call RailRadar. It is the only keyed source, so a failure here cannot be covered by another key.
-2. Also scrape RailYatri once, if enabled. Free, and it gives us a second opinion to merge.
+1. Fetch RailYatri and ConfirmTkt, each for the journey's run date, inside the rate limits below.
+2. Parse. Only passed stops become events.
+3. Call RailRadar only on a scored trip, or when both scrapes failed or have not reported an arrival that is due.
+
+### Lag and a stalled feed
+
+The scrapes run about 7 minutes behind. An arrival can be real and not yet on the page.
+
+- The window closes. Wait 7 minutes before showing "Running late". Checks continue during the wait.
+- Each page has an update time. When it is old, the feed has stalled. That means "no news", not "not arrived". The web app shows a live "searching" line, not "Running late".
 
 ### Quota guard
 
@@ -112,7 +146,8 @@ Free tiers are tiny, so spending is controlled in code.
 
 - Each source has `monthlyBudget` and `demoReserve` in config.
 - Development spends from `monthlyBudget - demoReserve`, paced evenly: allowed so far = `(monthlyBudget - demoReserve) * dayOfMonth / daysInMonth`.
-- Over the allowance: skip that source and log `quota_paced`.
+- Over the allowance: skip that source and log `quota_paced`. For RailRadar this means the worker keeps tracking on the scrapes.
+- A scored trip spends at most about 6 RailRadar calls. About 20 a month are the reserve. Only a demo or a fallback when both scrapes fail may spend them.
 - Running with `--demo` spends from `demoReserve` instead, with no pacing.
 - Preflight prints what is left in each pot.
 
@@ -121,10 +156,12 @@ Free tiers are tiny, so spending is controlled in code.
 | Use | RailRadar (100) | Scrape |
 |-----|-----------------|--------|
 | Development and testing | 20 | Free |
-| One scored trip (12951, 7 stops) | 25 | Free |
-| Demo reserve | 55 | Free |
+| One scored trip (12951), capped | about 6 | Free |
+| Reserve | about 20 | Free |
 
-One demo costs about 6 RailRadar calls: preflight 1, picker 1, catch-up 1, about 3 window checks. That is about 9 demos a month.
+The rest covers fallback calls. A demo on the scrapes costs about 2 RailRadar calls: preflight 1, picker 1. A fallback adds more.
+
+The monthly count is read from `raw_fetches`. Retention clears page bodies and keeps the rows, so the count stays right after a sweep.
 
 ## Errors and backoff
 
@@ -132,12 +169,28 @@ One demo costs about 6 RailRadar calls: preflight 1, picker 1, catch-up 1, about
 - After 5 failures in a row, open the circuit for 1 hour. No calls to that source until then.
 - HTTP 429 opens the circuit straight away.
 - Parse errors count as failures. A source returning junk is down.
+- An unknown station code counts as a failed read.
+
+### Blocked sources
+
+A 401, 403 or 451, or a captcha page, means the site has blocked us. The source stops and the worker retries on its own after 1 day, then 3, then 7. No human resets it. No IP rotation, no browser spoofing.
+
+### Failed reads repair themselves
+
+No step may need a person to do manual work.
+
+1. A failed read saves the page and opens a GitHub issue.
+2. An agent fixes the parser, with a new fixture and a test.
+3. The fix merges when the tests pass.
+4. The worker pulls the latest passing code when it starts each day.
+
+Meanwhile the other scrape and capped RailRadar keep the journey tracked. Blocks and thin trips open issues the same way.
 
 ## Failover during a demo
 
 1. The failing source's circuit opens.
-2. There is no second key to fall back to. The next check runs on the scrape alone, and confidence falls to `low`, because only a source of trust 0.5 is reporting out of the 1.3 we asked.
-3. If every source is down, nothing new is confirmed. The dot keeps moving on pace, the zone keeps widening, and the app shows how long since the last update.
+2. The other scrape carries the check. Confidence is `medium` at best, because only one family is reporting. If both scrapes are down, capped RailRadar is asked once per remaining window.
+3. If every source is down or the RailRadar budget is spent, nothing new is confirmed. The dot keeps moving on pace, the zone keeps widening, and the app shows how long since the last update.
 
 ## Adapter contract
 
@@ -148,7 +201,7 @@ Every source is one adapter. Fetching and parsing are separate, so the raw respo
 ```ts
 // packages/core/src/types.ts
 
-export type SourceId = 'railradar' | 'railyatri_scrape';
+export type SourceId = 'railradar' | 'railyatri_scrape' | 'confirmtkt_scrape';
 
 export interface SourceAdapter {
   readonly id: SourceId;
@@ -201,11 +254,18 @@ export type SourceEvent = {
 
 Every response is validated with a zod schema inside the parser. If the shape changes, the parser returns errors and the source's health drops. It never silently produces wrong events.
 
-Parsers keep only actual times. Expected or predicted times from a source are dropped, however far ahead they are. We compute our own windows, the same way we compute our own delay.
+Parsers keep only actual times. Only passed stops become events. Expected or predicted times from a source are dropped, however far ahead they are. We compute our own windows, the same way we compute our own delay.
+
+### Storage
+
+- A scrape parser keeps only the train-data block of the page (`ltsData` for RailYatri, the `var data` block for ConfirmTkt). The rest of the page is not stored.
+- A page that failed to read is kept whole, so a parser fix can be tested against it.
+- Retention clears a journey's stored bodies and keeps the `raw_fetches` rows.
+- Cleanup runs when the worker exits.
 
 ## Merging: when sources disagree
 
-We never merge positions. We merge events, then estimate position from the merged events. The resolver is a pure function in `packages/core/src/fusion/resolve.ts`. It re-runs over all of a journey's events whenever a check lands, in the same step as pace and windows.
+We never merge positions. We merge events, then estimate position from the merged events. The resolver is a pure function in `packages/core/src/fusion/resolve.ts`. It re-runs over all of a journey's events whenever a check lands, in the same step as pace and windows. "Asked" is worked out per event, from the sources that were checked for it, not from the latest check alone. Otherwise a later scrape-only check would downgrade an earlier `high` event.
 
 ### Step 1. Normalize
 
@@ -254,13 +314,16 @@ confidenceScore = sum of trust of sources in the winning cluster
 
 A source we asked that said nothing counts against the score.
 
+Sources belong to families. A family is one site or one upstream. RailYatri, ConfirmTkt and RailRadar are three families. Two pages from one site count as one. Every site probably copies NTES, so two agreeing pages are weaker than two independent ones. The family rule stops one site seen twice from reading as confirmation.
+
+Levels: `high` needs a score of 0.75 or more **and** at least two families in the winning cluster. `medium` is a score from 0.5, or 0.75 or more with one family. `low` is below 0.5.
+
 | Example | Score | Level |
 |---------|-------|-------|
-| RailRadar (0.8) and the scrape (0.5) agree | 1.3 ÷ 1.3 = 1.00 | `high` |
-| RailRadar reports, the scrape says nothing | 0.8 ÷ 1.3 = 0.62 | `medium` |
-| Only the scrape reports, RailRadar was asked | 0.5 ÷ 1.3 = 0.38 | `low` |
-
-Levels: `high` at 0.75 or more, `medium` from 0.5, `low` below 0.5.
+| RailYatri (0.5) and ConfirmTkt (0.5) agree | 1.0 ÷ 1.0 = 1.00 | `high` |
+| RailRadar (0.8) and a scrape (0.5) agree | 1.3 ÷ 1.3 = 1.00 | `high` |
+| RailYatri reports, ConfirmTkt says nothing | 0.5 ÷ 1.0 = 0.50 | `medium` |
+| Only a scrape reports, RailRadar was also asked | 0.5 ÷ 1.3 = 0.38 | `low` |
 
 Internal only. Viewable in Supabase through the merge audit view (F2.6). The app shows the confidence line from journey scores instead (F7.5).
 
@@ -285,7 +348,9 @@ Starting formula, to be tuned:
 trust = coverage / (1 + errorMin + lagMin / 10)
 ```
 
-Rolling window of the last 20 scored trips. Until a source has 5, use the prior: `railradar` 0.8, `railyatri_scrape` 0.5.
+Rolling window of the last 20 scored trips. Until a source has 5, use the prior: `railradar` 0.8, `railyatri_scrape` 0.5, `confirmtkt_scrape` 0.5.
+
+Scored trips still ask RailRadar for every arrival. Otherwise the scrapes would be graded against themselves.
 
 Known weak spots:
 
@@ -294,8 +359,14 @@ Known weak spots:
 
 ## Scraping rules
 
-- At most 1 request per minute across all scraped sites.
+- At most 1 request per minute across all scraped sites. A `robots.txt` fetch counts toward the limit.
+- Never re-fetch the same URL inside 5 min.
 - Honest `User-Agent` naming the project.
-- Respect `robots.txt`.
-- Never re-fetch the same page inside 5 min.
-- If a site blocks us, stop. Do not rotate IPs or spoof browsers.
+- Respect `robots.txt`. Cache it for 24 hours per host. A 403, a 5xx or a timeout means the path is disallowed.
+- If a site blocks us, stop that source and follow Blocked sources above. Do not rotate IPs or spoof browsers. No headless browser.
+- The limits live in a pure gate in `packages/core`. Its state is read from `raw_fetches`, so it needs no new table.
+- Kill-switches: `SCRAPE_ENABLED`, a per-source enable list, the blocked state and a daily scrape cap.
+
+## Where the worker runs
+
+For now the worker runs on the owner's PC. A scheduled task starts it each evening and keeps the PC awake until the train arrives. A free cloud host comes later, once a probe from that host's IP shows the scrapes are not blocked. Cloud IPs get blocked more often than home ones.

@@ -63,8 +63,8 @@ Fetch live data and store it untouched until the trip is scored.
 | F1.3 | Watcher gating | P0 | Only journeys open in a visible tab get checked. Any number of viewers on one train costs the same as one. Exception: the monthly scored trip. |
 | F1.4 | Catch-up check | P0 | One check when the first viewer opens a journey, to learn where it is. Skipped if the state is already fresh. |
 | F1.5 | Quota guard | P0 | Holds a demo reserve. Spreads the rest evenly over the month. |
-| F1.6 | Raw store | P0 | Every response saved before parsing. Deleted with the journey's data (F5.5). |
-| F1.7 | Backoff and circuit breaker | P0 | Slow down on errors, pause a source after repeated failures. |
+| F1.6 | Raw store | P0 | Every response saved before parsing. Scrapes keep only the train-data block, and full pages only for failed reads. Bodies are cleared with the journey's data (F5.5). |
+| F1.7 | Backoff and circuit breaker | P0 | Slow down on errors, pause a source after repeated failures. A blocked source retries by itself after 1, 3, then 7 days. |
 | F1.8 | Source health | P1 | Success rate, last success, quota left, per source. Ops page only. |
 
 ### F2 Merging (P0)
@@ -76,7 +76,7 @@ Turn several disagreeing reports into one set of station events we trust. Intern
 | F2.1 | Normalizer | P0 | Station codes, time zones, journey date. |
 | F2.2 | Nonsense filter | P0 | Rejects impossible events and logs why. |
 | F2.3 | Resolver | P0 | Groups, dedupes and picks one time per event. |
-| F2.4 | Second opinion | P0 | Each check pairs one keyed API call with one free scrape, so there is something to merge. |
+| F2.4 | Second opinion | P0 | Each check fetches two free scrapes (RailYatri and ConfirmTkt), so there is something to merge. RailRadar joins on scored trips and as fallback. |
 | F2.5 | Trust scoring | P1 | Scores each source after every scored trip. |
 | F2.6 | Merge audit view | P0 | One database view: for every station event, every source's reported time, the source we chose, and the confidence score. Viewed in Supabase during interviews. Never in the web app. |
 
@@ -115,7 +115,7 @@ All of F3 runs in the same step as each API reply. The screen gets data, pace an
 | F5.2 | Journey scores | P0 | When a journey ends: did arrivals land in the window, how wide were windows, how far off was the position. Feeds S2 to S4. |
 | F5.3 | Preflight | P0 | One command before an interview. Keys work, calls left, APIs answering and how fast, trains running now. Green or red. About 3 calls. |
 | F5.4 | Demo picker | P0 | Picks a train that is moving now, has fresh data, and is due at a station in 10 to 20 min. 1 call. |
-| F5.5 | Retention | P0 | Deletes a journey's data 24 h after it ends. Scores and learned caps stay. |
+| F5.5 | Retention | P0 | Deletes a journey's data 24 h after it ends and clears stored page bodies. Fetch rows, scores and learned caps stay. |
 | F5.6 | Failover | P0 | A source fails mid-demo, the next one takes over. All fail, the estimate keeps going and the zone widens. |
 
 ### F6 Backend API (P0)
@@ -168,4 +168,4 @@ For us, not users. Source health, quota and demo reserve left, last errors, rece
 
 - Product name. The repo is `train-tracker` until we pick one.
 - Default watchlist. Start with 12951 Mumbai Rajdhani. It runs 17:00 to 08:32 IST, which is 22:00 to 13:32 in Adelaide during daylight saving. Afternoon interviews rely on the demo picker.
-- The scrape second opinion (F2.4) leans on scraping more than before. If RailYatri blocks us, merging falls back to scored trips only.
+- The scrapes (F2.4) now carry every check. If one site blocks us, the other and capped RailRadar keep the journey tracked.

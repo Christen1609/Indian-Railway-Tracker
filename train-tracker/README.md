@@ -48,4 +48,4 @@ There is no offline mode, by design. `pnpm dev` and `pnpm preflight` are not bui
 - Map data: © OpenStreetMap contributors, ODbL. Map tiles: OpenFreeMap and OpenMapTiles.
 - Terrain: Mapterhorn.
 - Globe imagery: NASA GIBS, Blue Marble.
-- Live data: RailRadar, RailYatri. Unofficial. Not affiliated with Indian Railways.
+- Live data: RailRadar, RailYatri, ConfirmTkt. Unofficial. Not affiliated with Indian Railways.
