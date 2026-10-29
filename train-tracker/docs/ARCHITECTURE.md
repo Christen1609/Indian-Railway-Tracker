@@ -43,9 +43,9 @@ One check for one journey:
 
 Steps 3 to 5 are one function call in `packages/core`. They finish in milliseconds. The browser gets data, pace and windows in a single update.
 
-Between checks, the browser runs the same `packages/core` estimator every second, so the train glides. The server's `train_state` replaces the browser's version on every check.
+Between checks, the browser runs the same `packages/core` estimator every second, so the train glides. The server's `train_state` replaces the browser's version on every check. (Not built yet: today the browser shows `train_state` as written and eases the train to each new position.)
 
-The web app joins a Supabase Realtime presence channel per open journey. The scheduler reads presence to know which journeys anyone is watching.
+The web app joins a Supabase Realtime presence channel per open journey. The scheduler reads presence to know which journeys anyone is watching. (Not built yet: today the browser only subscribes to `train_state` changes.)
 
 ## Repo layout
 
@@ -60,10 +60,9 @@ train-tracker/
 │   │       ├── db/        Queries. No SQL anywhere else.
 │   │       ├── preflight.ts  Pre-demo checks.
 │   │       └── main.ts
-│   └── web/               React + Vite + MapLibre + deck.gl.
-│       ├── public/models/ train.glb (Kenney Train Kit, repainted)
+│   └── web/               React + Vite + MapLibre. Plain CSS.
 │       └── src/
-│           ├── features/  search, map, stops, status, demo-picker
+│           ├── features/  brand, landing, map, search, status, stops
 │           ├── lib/       Supabase client, formatting.
 │           └── main.tsx
 ├── packages/
@@ -180,12 +179,15 @@ Windows for every later stop are built from the previous stop's window: fast end
 
 ## Map and 3D train
 
-- MapLibre GL JS with OpenFreeMap tiles. Free, no key, no card, no usage limits on the public instance. Attribution is added automatically.
-- deck.gl on top, through `MapboxOverlay`, which works with MapLibre.
-- The train is a deck.gl `ScenegraphLayer` loading `public/models/train.glb`.
-  - Model: Kenney Train Kit (CC0). Repainted in Rajdhani colours in Blender. Under 5 MB.
-  - Position from the estimator every second. Heading from the route direction at that point.
-- The shaded zone is a deck.gl `PathLayer` along the route between the slow and fast positions.
+- MapLibre GL JS 5. The basemap is OpenFreeMap vector tiles. Free, no key, no card. Attribution is shown on the page.
+- Terrain is Mapterhorn elevation tiles (`tiles.mapterhorn.com`), also keyless. They drive 3D terrain and hillshade. A "3D terrain" toggle turns the relief off.
+- The train is a MapLibre `fill-extrusion` layer built from GeoJSON boxes. There is no 3D model file. Below zoom 10.5 a red beacon marks the train instead.
+- Position and zone come from the `train_state` row: `km` for the train, `lo_km` to `hi_km` for the shaded zone. The zone is a glowing line along the route between those two points, with a dot at each end. When a new row arrives the train eases to its new position over one second. The browser does not run the estimator.
+- The landing page is a MapLibre globe with NASA GIBS Blue Marble imagery (keyless). On desktop it turns toward the cursor. On touch it spins with the finger and keeps turning after a fling.
+
+### Rule 6 exception
+
+Hard rule 6 keeps network calls in `apps/ingest/src/adapters`. Tiles and imagery that MapLibre loads in the browser are the one exception. They are keyless public tile services, carry no train data and are not data sources. Train data reaches the browser only from Supabase.
 
 ## Data model
 
@@ -399,8 +401,13 @@ Most bugs in this project will be time bugs.
 | Pace from the last two sections, capped per section | Christen's idea, with caps from timetable spare time and top speed. Decided 20 Oct 2026. |
 | No source details in the web app | Users don't care which API said what. Interview explanation lives in separate notes. Decided 21 Oct 2026. |
 | MapLibre + OpenFreeMap | Google Maps needs a card on file. Decided 21 Oct 2026. |
-| deck.gl for the train and zone | Renders glTF models on MapLibre. |
-| Kenney Train Kit for the 3D train | CC0, free, light. Decided 21 Oct 2026. |
+| deck.gl for the train and zone | Renders glTF models on MapLibre. Superseded 28 Oct 2026 by the `fill-extrusion` train and zone line below. |
+| Kenney Train Kit for the 3D train | CC0, free, light. Decided 21 Oct 2026. Superseded 28 Oct 2026 by the `fill-extrusion` train below. |
+| Train and zone drawn with MapLibre layers, no deck.gl | The train is a `fill-extrusion` layer and the zone is a line layer. One map library, no model file to load or repaint. Decided 28 Oct 2026. |
+| Mapterhorn for terrain | Keyless elevation tiles that work with MapLibre 3D terrain and hillshade. Decided 28 Oct 2026. |
+| NASA GIBS globe on the landing page | Keyless imagery, so the landing page needs no account or key. Decided 29 Oct 2026. |
+| Frontend waits for live data, no dev stub | The first live page (12951) was built on real `train_state` rows from Supabase. Hard rule 2 held and no stub was written. Decided 28 Oct 2026. |
+| Vercel Hobby for the web app | Free, no card. A static Vite build, served at indian-railway-tracker.vercel.app. Replaced the old `site/` prototype, which was removed. Decided 29 Oct 2026. |
 | zod for every external response | Source shapes change without warning. |
 | Vitest | Fast, works with Vite and plain Node. |
 
@@ -408,8 +415,7 @@ Most bugs in this project will be time bugs.
 
 | Question | Options | Lean |
 |----------|---------|------|
-| Where does the ingest worker run, for free? | A free Node host vs Supabase Edge Function with pg_cron | Check free tiers at M1. Must not need a card. |
-| How does the frontend lane build before M1 ingest exists? | Wait for M1, vs a dev-only typed `TrainState` stub in `apps/web` that no production build imports | The stub. Hard rule 2 exists so a demo can never be faked, not so a component cannot be developed. Needs a call before two frontend agents start. |
+| Where does the ingest worker run, for free? | A free Node host vs Supabase Edge Function with pg_cron | Check free tiers. Must not need a card. Until decided, the worker runs on the developer's machine, started by hand: `pnpm --filter @train-tracker/ingest start 12951`. |
 | Window weights and buffer | 0.6/0.4, 5 min or 5% | Starting values. Tune from journey scores. |
 
 When an open question is decided, move it to Decided with one line of why. Do not delete history.
