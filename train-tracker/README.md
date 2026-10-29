@@ -10,7 +10,9 @@ Working name. A portfolio project built by Christen and Dad, not a business.
 
 ## Status
 
-M0, foundation. Docs written. The pnpm workspace, tooling and `packages/core/src/types.ts` are in, and `pnpm lint`, `pnpm typecheck` and `pnpm test` pass. No feature code yet. A single-file prototype of the estimator is published at [indian-railway-tracker.vercel.app](https://indian-railway-tracker.vercel.app), served from `site/` and running on a simulated feed. Its estimator is the earlier model, pace straight from the timetable, and will be replaced rather than copied when `packages/core/src/estimate.ts` lands. Its 8-stop timetable for 12951, with per-stop km checked against etrain.info and ixigo on 17 Oct 2026, is the seed for `packages/refdata`.
+The web app is live at [indian-railway-tracker.vercel.app](https://indian-railway-tracker.vercel.app). Its landing page searches for a train over a globe. Train 12951 has a live page with a 3D map, a status card and a stop list. The page reads Supabase directly and updates through Realtime when the worker writes a new `train_state` row. The old `site/` prototype is gone.
+
+The ingest worker and the 12951 timetable loader work. The worker is started by hand on the developer's machine with `pnpm --filter @train-tracker/ingest start 12951`. Where it runs long term is not decided. `pnpm lint`, `pnpm typecheck` and `pnpm test` pass.
 
 ## Docs
 
@@ -26,21 +28,24 @@ M0, foundation. Docs written. The pnpm workspace, tooling and `packages/core/src
 
 ## Quick start
 
-Planned for M0. Needs Node 20+, pnpm and the Supabase CLI.
+Needs Node 20+, pnpm and the Supabase CLI.
 
 ```
 git clone <repo>
 cd train-tracker
-cp .env.example .env      # then add your API keys
+cp .env.example .env      # then add your keys
 pnpm install
-pnpm dev
+pnpm --filter @train-tracker/refdata load         # stations, trains and the 12951 timetable
+pnpm --filter @train-tracker/ingest start 12951   # watch train 12951
+pnpm --filter @train-tracker/web dev              # the web app
 ```
 
-There is no offline mode, by design. Before any demo, run `pnpm preflight`.
+There is no offline mode, by design. `pnpm dev` and `pnpm preflight` are not built yet.
 
 ## Credits
 
 - Station and train data: [datameet/railways](https://github.com/datameet/railways), CC0.
-- Map data: © OpenStreetMap contributors, ODbL. Map tiles: OpenFreeMap.
-- 3D train: Kenney Train Kit, CC0.
+- Map data: © OpenStreetMap contributors, ODbL. Map tiles: OpenFreeMap and OpenMapTiles.
+- Terrain: Mapterhorn.
+- Globe imagery: NASA GIBS, Blue Marble.
 - Live data: RailRadar, RailYatri. Unofficial. Not affiliated with Indian Railways.

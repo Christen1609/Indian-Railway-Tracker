@@ -39,7 +39,7 @@ Two agents adding dependencies at once produce lockfile conflicts, and two agent
 3. Never poll on a timer. A journey is checked only when its arrival window is open, it is running late, or it gets its catch-up check. See DATA_SOURCES.md, "When we check".
 4. Never show source names, trust scores or raw feed data in `apps/web`.
 5. `packages/core` is pure. No `fetch`, no database, no `Date.now()`, no `Math.random()`, no `process.env`. Time comes in as `now`.
-6. All network calls live in `apps/ingest/src/adapters`. All SQL lives in `apps/ingest/src/db`.
+6. All network calls live in `apps/ingest/src/adapters`. All SQL lives in `apps/ingest/src/db`. The one exception is map tiles and imagery that MapLibre loads in the browser (see ARCHITECTURE, "Map and 3D train").
 7. Validate every external response with zod before use.
 8. Units in names: `delayMin`, `distanceKm`, `latencyMs`.
 9. Store UTC, display IST. Time zone math only in `packages/core/src/time.ts`.
@@ -74,6 +74,11 @@ pnpm typecheck        # tsc across the workspace
 pnpm format           # Prettier write
 
 pnpm --filter @train-tracker/refdata load   # stations, trains and the 12951 timetable into Supabase
+pnpm --filter @train-tracker/web dev        # web app with hot reload
+pnpm --filter @train-tracker/web build      # type check, then static build
+pnpm --filter @train-tracker/web preview    # serve the static build
+pnpm --filter @train-tracker/ingest start 12951   # watch trains; arguments are train numbers
+pnpm --filter @train-tracker/ingest retention     # delete finished journeys' data
 ```
 
 Not built yet. Add each one here as it lands:

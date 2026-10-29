@@ -135,13 +135,13 @@ Visual design waits for the frontend skill research. Build function first with p
 | ID | Subfeature | Pri | Notes |
 |----|-----------|-----|-------|
 | F7.1 | Train search | P0 | Number or name, with journey date. |
-| F7.2 | Live map | P0 | MapLibre with OpenFreeMap tiles. Route, stations, train, shaded zone. |
+| F7.2 | Live map | P0 | MapLibre with OpenFreeMap tiles and Mapterhorn terrain. Route, stations, train, shaded zone. |
 | F7.3 | Stop list | P0 | Scheduled time, confirmed time, or window. Delay per stop. |
 | F7.4 | Status line | P0 | "On time", "Running 12 min late", "Running late. Updating soon." |
 | F7.5 | Confidence line | P1 | "Trains arrive inside this window 9 times out of 10." From journey scores. Hidden until 5 trips are scored. |
 | F7.6 | Last update | P0 | "Updated 4 min ago". |
 | F7.7 | Demo picker button | P0 | Front end for F5.4. |
-| F7.8 | 3D train | P1 | Kenney Train Kit model, repainted in Blender, rendered with deck.gl. Faces the direction of travel. |
+| F7.8 | 3D train | P1 | A box train drawn as a MapLibre `fill-extrusion` layer, shown from zoom 10.5. Faces the direction of travel. |
 | F7.9 | Time-distance chart | P2 | From the prototype. |
 | F7.10 | Share link | P2 | URL for one train and date. |
 
@@ -161,7 +161,7 @@ For us, not users. Source health, quota and demo reserve left, last errors, rece
 | M1 | One source end to end | F1.1 (RailRadar), F1.2, F1.4, F1.6, F2.1, F3.1, F3.2, F3.4, F3.6, F6.1, F7.2 basic | One real train moves on a plain map with a window. |
 | M2 | Merging and rationing | F1.3, F1.5, F1.7, F2.2 to F2.4, F2.6, F3.5, F3.7, F5.6 | Two sources merge, checks happen only in windows, late trains handled. |
 | M3 | Demo ready | F5.1 to F5.5, F7.3, F7.4, F7.6, F7.7 | Preflight passes, the picker finds a running train, trips get scored. |
-| M4 | Frontend | F7 in full, design system, F7.8 3D train | After frontend research. |
+| M4 | Frontend | F7 in full, design system, F7.8 3D train (F7.8 built) | After frontend research. |
 | M5 | Extras | F2.5, F3.3, F3.8, F7.5, F8, F9 | Pick by interview value. |
 
 ## Open questions

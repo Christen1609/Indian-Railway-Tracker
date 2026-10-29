@@ -78,4 +78,4 @@ The cheapest reliable split: the decider writes the test, the builder makes it p
 
 The seam between ingest and web is `packages/core/src/types.ts` and the `train_state` row. Both lanes import the same types, so neither can drift quietly.
 
-The frontend lane has nothing live to render until M1 lands, so it is blocked on the backend lane. How to unblock it is an open question in the `ARCHITECTURE.md` Decisions table. Until it is decided, the frontend lane builds types and contracts, not screens.
+The frontend lane renders only live data, so it waits for the backend lane to write `train_state`. This is settled: the frontend was built on live `train_state` rows and no stub was written. See the "Frontend waits for live data, no dev stub" row in the `ARCHITECTURE.md` Decided table.
