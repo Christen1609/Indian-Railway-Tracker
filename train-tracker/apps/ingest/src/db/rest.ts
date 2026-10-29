@@ -5,6 +5,7 @@ import { assert } from '@train-tracker/core/types';
 const MERGE_DUPLICATES = 'resolution=merge-duplicates';
 const REPRESENTATION = 'return=representation';
 const FILTERED = '=eq.';
+export const PAGE_SIZE = 1000;
 
 export type DbConfig = { url: string; serviceRoleKey: string };
 
@@ -30,6 +31,28 @@ export async function readRows(path: string, config: DbConfig): Promise<unknown>
     );
   }
   return response.json();
+}
+
+/** Every row a query matches, read page by page until a short page; the query must be ordered */
+export async function readAllRows(
+  path: string,
+  config: DbConfig,
+  readPage: typeof readRows = readRows,
+): Promise<unknown[]> {
+  assert(
+    path.includes('order='),
+    `an ordered query so pages neither overlap nor skip, got ${path}`,
+  );
+  const joiner = path.includes('?') ? '&' : '?';
+  const rows: unknown[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const page = await readPage(`${path}${joiner}limit=${PAGE_SIZE}&offset=${offset}`, config); // one page, from readRows
+    assert(Array.isArray(page), `an array of rows, got ${typeof page}`);
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) {
+      return rows;
+    }
+  }
 }
 
 /** How many rows a query matches, without fetching any of them */

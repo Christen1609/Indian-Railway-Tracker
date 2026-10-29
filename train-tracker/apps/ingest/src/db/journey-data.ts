@@ -18,7 +18,7 @@ import type {
 import type { LoggedWindow, WindowHit } from '@train-tracker/core/accuracy/score';
 import type { SectionCapSeen } from '@train-tracker/core/estimate';
 import { istMonthStart } from '@train-tracker/core/time';
-import { countRows, deleteRows, patchRows, readRows, writeRows } from './rest.js';
+import { countRows, deleteRows, patchRows, readAllRows, readRows, writeRows } from './rest.js';
 import type { DbConfig } from './rest.js';
 
 const JourneyRows = z.array(z.object({ id: z.string().min(1), is_scored: z.boolean() }));
@@ -56,6 +56,17 @@ const ResolvedRows = z.array(
   }),
 );
 
+const SourceEventRows = z.array(
+  z.object({
+    source: z.string().min(1),
+    station_code: z.string().min(1),
+    type: z.string().min(1),
+    at: z.string().min(1),
+    fetched_at: z.string().min(1),
+    raw_fetch_id: z.string().min(1),
+  }),
+);
+
 const StateRows = z.array(
   z.object({ next_check_at: z.string().nullable(), updated_at: z.string().min(1) }),
 );
@@ -77,6 +88,8 @@ const UncleanedRows = z.array(
 );
 
 export type JourneyRef = { id: string; isScored: boolean };
+
+export type JourneyEventsRef = { id: string; trainNumber: string; journeyDate: IsoDate };
 
 export type UncleanedJourney = { id: string; trainNumber: string; journeyDate: IsoDate };
 
@@ -301,6 +314,25 @@ export async function resolvedFor(journeyId: string, config: DbConfig): Promise<
     chosenSource: row.chosen_source as SourceId,
     sources: row.sources as SourceId[],
     resolvedAt: row.resolved_at,
+  }));
+}
+
+/** Every event any source gave for one journey that the nonsense rules let through */
+export async function sourceEventsFor(
+  journey: JourneyEventsRef,
+  config: DbConfig,
+): Promise<SourceEvent[]> {
+  const query = `source_events?journey_id=eq.${journey.id}&rejected=is.null&select=source,station_code,type,at,fetched_at,raw_fetch_id&order=fetched_at.asc,id.asc`;
+  const rows = SourceEventRows.parse(await readAllRows(query, config)); // rows, from readAllRows
+  return rows.map((row) => ({
+    source: row.source as SourceId,
+    trainNumber: journey.trainNumber,
+    journeyDate: journey.journeyDate,
+    stationCode: row.station_code,
+    type: row.type as EventType,
+    at: row.at,
+    fetchedAt: row.fetched_at,
+    rawFetchId: row.raw_fetch_id,
   }));
 }
 
