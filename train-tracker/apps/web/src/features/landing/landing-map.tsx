@@ -1,9 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useRef } from 'react';
 import { Map as MapLibreMap } from 'maplibre-gl';
-import type { GeoJSONSource } from 'maplibre-gl';
-import { pointCollection } from '../map/geometry';
-import type { Coord, FeatureCollection } from '../map/geometry';
 import { landingStyle } from '../map/map-style';
 
 const INDIA: [number, number] = [80, 22];
@@ -20,8 +17,8 @@ const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
 function framing() {
   if (window.innerWidth <= MOBILE_MAX_WIDTH_PX) {
     return {
-      zoom: 1.5,
-      padding: { top: Math.round(window.innerHeight * 0.62), bottom: 0, left: 0, right: 0 },
+      zoom: 1.6,
+      padding: { top: Math.round(window.innerHeight * 0.5), bottom: 0, left: 0, right: 0 },
     };
   }
   return {
@@ -35,25 +32,8 @@ function framing() {
   };
 }
 
-/** Colours for the live marker from the page's tokens */
-function markerColours() {
-  const styles = getComputedStyle(document.documentElement);
-  return {
-    fill: styles.getPropertyValue('--sig').trim(),
-    ring: styles.getPropertyValue('--sig-ink').trim(),
-  };
-}
-
-/** One marker feature per position */
-function markerCollection(marks: Coord[]): FeatureCollection {
-  return pointCollection(marks.map((at) => ({ at })));
-}
-
-export function LandingMap({ marks }: { marks: Coord[] }) {
+export function LandingMap() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const marksRef = useRef(marks);
-  const sourceRef = useRef<GeoJSONSource | null>(null);
-  marksRef.current = marks;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -65,7 +45,7 @@ export function LandingMap({ marks }: { marks: Coord[] }) {
     const { zoom, padding } = framing();
     const map = new MapLibreMap({
       container,
-      style: landingStyle(scheme.matches, markerColours(), markerCollection(marksRef.current)),
+      style: landingStyle(scheme.matches),
       center: INDIA,
       zoom,
       interactive: false,
@@ -97,32 +77,19 @@ export function LandingMap({ marks }: { marks: Coord[] }) {
         frameId = requestAnimationFrame(spin);
       }
     };
-    map.on('load', () => {
-      sourceRef.current = map.getSource<GeoJSONSource>('dots') ?? null;
-    });
     applyMotion();
     reduced.addEventListener('change', applyMotion);
     const recolour = () => {
-      map.setStyle(
-        landingStyle(scheme.matches, markerColours(), markerCollection(marksRef.current)),
-      );
-      map.once('styledata', () => {
-        sourceRef.current = map.getSource<GeoJSONSource>('dots') ?? null;
-      });
+      map.setStyle(landingStyle(scheme.matches));
     };
     scheme.addEventListener('change', recolour);
     return () => {
-      sourceRef.current = null;
       cancelAnimationFrame(frameId);
       reduced.removeEventListener('change', applyMotion);
       scheme.removeEventListener('change', recolour);
       map.remove();
     };
   }, []);
-
-  useEffect(() => {
-    sourceRef.current?.setData(markerCollection(marks) as Parameters<GeoJSONSource['setData']>[0]);
-  }, [marks]);
 
   return <div className="landing-map" ref={containerRef} aria-hidden="true" inert></div>;
 }

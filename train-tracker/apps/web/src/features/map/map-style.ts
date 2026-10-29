@@ -482,12 +482,8 @@ export function mapStyle(track: Track): StyleSpecification {
   };
 }
 
-/** A globe of satellite imagery with a soft atmosphere and one marker per live train */
-export function landingStyle(
-  isDark: boolean,
-  marker: { fill: string; ring: string },
-  dots: FeatureCollection,
-): StyleSpecification {
+/** A globe of satellite imagery with a soft atmosphere */
+export function landingStyle(isDark: boolean): StyleSpecification {
   const space = isDark ? PALETTE.night.bg : PALETTE.day.bg;
   const halo = isDark ? '#1b2a44' : '#bcd6ec';
   return {
@@ -500,7 +496,6 @@ export function landingStyle(
         tileSize: 256,
         maxzoom: 8,
       },
-      dots: geojson(dots),
     },
     sky: {
       'sky-color': space,
@@ -520,17 +515,6 @@ export function landingStyle(
           'raster-opacity': isDark ? 0.8 : 0.92,
           'raster-brightness-max': isDark ? 0.65 : 1,
           'raster-saturation': -0.2,
-        },
-      },
-      {
-        id: 'dot',
-        type: 'circle',
-        source: 'dots',
-        paint: {
-          'circle-radius': 5,
-          'circle-color': marker.fill,
-          'circle-stroke-color': marker.ring,
-          'circle-stroke-width': 1.5,
         },
       },
     ],

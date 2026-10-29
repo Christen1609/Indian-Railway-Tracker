@@ -1,4 +1,4 @@
-// Features: IST clocks and dates, relative time, delay, train status, pace, distance
+// Features: IST clocks and dates, relative time, delay, pace, distance
 
 import {
   dayOffset,
@@ -8,7 +8,7 @@ import {
   timetableMinuteToUtc,
   utcToTimetableMinute,
 } from '@train-tracker/core/time';
-import type { ArrivalWindow, IsoDate, IsoUtc, TrainState } from '@train-tracker/core/types';
+import type { ArrivalWindow, IsoDate, IsoUtc } from '@train-tracker/core/types';
 
 const IST_ZONE = 'Asia/Kolkata';
 const MINUTES_PER_HOUR = 60;
@@ -19,12 +19,6 @@ const JOURNEY_DATE_PARTS: Intl.DateTimeFormatOptions = {
   day: 'numeric',
   month: 'short',
   year: 'numeric',
-};
-
-export type StatusLine = {
-  text: string;
-  delayText: string | null;
-  tone: 'ok' | 'warn' | 'late' | 'idle';
 };
 
 /** IST date words for an instant, such as "Tue 27 Oct 2026" */
@@ -101,55 +95,6 @@ export function delayTone(delayMin: number): 'ok' | 'warn' | 'late' {
     return 'ok';
   }
   return delayMin <= MINOR_DELAY_MIN ? 'warn' : 'late';
-}
-
-/** Where a train is in words, with its delay and the tone to colour it */
-export function describeTrainStatus(input: {
-  state: TrainState | null;
-  nextName: string | null;
-  nextDueMin: number | null;
-  originName: string;
-  destinationName: string;
-  departMin: number | null;
-}): StatusLine {
-  const { state, nextName, nextDueMin, originName, destinationName, departMin } = input;
-  if (state === null) {
-    return { text: 'No position recorded yet', delayText: null, tone: 'idle' };
-  }
-  const delayMin = state.delayMin;
-  const tone = delayMin === null ? 'ok' : delayTone(delayMin); // colour class, from delayTone
-  const delayText = delayMin === null ? null : formatDelay(delayMin); // delay in words, from formatDelay
-  if (state.state === 'scheduled') {
-    const at = departMin === null ? '' : ` at ${formatTimetableMinute(departMin)}`; // departure clock, from formatTimetableMinute
-    return { text: `Leaves ${originName}${at}`, delayText: null, tone: 'idle' };
-  }
-  if (state.state === 'arrived') {
-    const delay = delayText === null ? '' : `, ${delayText.toLowerCase()}`;
-    return { text: `Arrived ${destinationName}${delay}`, delayText: null, tone };
-  }
-  const lead = state.state === 'halted' ? 'Halted' : 'Running';
-  if (nextName === null) {
-    return { text: lead, delayText, tone };
-  }
-  const due = nextDueMin === null ? '' : `, due ${formatTimetableMinute(nextDueMin)}`; // scheduled clock, from formatTimetableMinute
-  return { text: `Next: ${nextName}${due}`, delayText, tone };
-}
-
-/** Station name in title case, leaving words that already mix cases alone */
-export function formatStationName(name: string): string {
-  return name
-    .split(/(\s+|-)/)
-    .map((word) =>
-      word.length > 1 && word === word.toUpperCase()
-        ? `${word.charAt(0)}${word.slice(1).toLowerCase()}`
-        : word,
-    )
-    .join('');
-}
-
-/** Distance covered out of a total, such as "612 of 1,388 km" */
-export function formatKmOf(doneKm: number, totalKm: number): string {
-  return `${Math.round(doneKm).toLocaleString('en-IN')} of ${formatKm(totalKm)}`; // total with its unit, from formatKm
 }
 
 /** Pace as a share faster or slower than the timetable */
