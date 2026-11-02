@@ -13,11 +13,11 @@ Page scrapes carry every check. Goibibo and ConfirmTkt are the main scrapes. Tra
 | ID | Source | Auth | Env var | Free quota | Use it for | Risk |
 |----|--------|------|---------|-----------|------------|------|
 | `railradar` | RailRadar API, `https://api.railradar.in/v1` | `Authorization: Bearer <key>` or `X-API-Key` | `RAILRADAR_API_KEY` | 100 requests/month (sandbox, no card) | Scored trips and fallback. Per-train live status and the snapshot. About 6 calls a trip, about 20 a month held in reserve. | Snapshot endpoint is marked legacy. |
-| `goibibo_scrape` | Goibibo live status page, `https://www.goibibo.com/trains/live-train-status/<number>-running-status/` | None | None | Self-imposed: 1 request per minute across all scrape sites | Main source. Every check. | HTML can change any day. Ignores a date, but follows a running train past midnight by itself. Its response looked cached. |
-| `confirmtkt_scrape` | ConfirmTkt running status page, `https://www.confirmtkt.com/train-running-status/<number>?Date=DD-Mon-YYYY` | None | None | Same shared limit | Main source. Every check. The only source that names the run, through the date parameter. | HTML can change any day. Actual times are in the rendered rows. Not built yet. |
-| `travelkhana_scrape` | Travelkhana track-train page, `https://www.travelkhana.com/travelkhana/track-train/<number>-…` | None | None | Same shared limit | Backup. | HTML can change any day. One page holds the last 8 runs. Not built yet. |
+| `goibibo_scrape` | Goibibo live status page, `https://www.goibibo.com/trains/live-train-status/<number>-running-status/` | None | None | Self-imposed: 1 request per minute across all scrape sites | Main source. Every check. | HTML can change any day. Ignores a date, and cannot be relied on after midnight: it can show the next run while the last one is still running. Its response looks cached. |
+| `confirmtkt_scrape` | ConfirmTkt running status page, `https://www.confirmtkt.com/train-running-status/<number>?Date=DD-Mon-YYYY` | None | None | Same shared limit | Main source. Every check. The only source that names the run, through the date parameter. | HTML can change any day. Actual times are in the rendered rows. |
+| `travelkhana_scrape` | Travelkhana track-train page, `https://www.travelkhana.com/travelkhana/track-train/<number>-…` | None | None | Same shared limit | Backup. | HTML can change any day. One page holds the last 8 runs. The URL carries a name slug, so it needs one per train. |
 | `railyatri_scrape` | RailYatri live status page, `https://www.railyatri.in/live-train-status/<number>` | None | None | Same shared limit | Backup. Its own family, since it says it blends phone GPS. | Shows only the current run, so it cannot cover a train after midnight. |
-| `railmitra_scrape` | Railmitra running status page, `…/live-train-running-status/<slug>-<number>?day=yesterday` | None | None | Same shared limit | Spare. Halts only. | Not built yet. |
+| `railmitra_scrape` | Railmitra running status page, `…/live-train-running-status/<slug>-<number>?day=yesterday` | None | None | Same shared limit | Spare. Halts only. | The URL carries a name slug. It can answer with a service-error page. |
 
 RailRadar endpoints we use:
 
@@ -39,16 +39,18 @@ What the first two real responses showed, 22 Oct 2026:
 
 ### What the scrapes showed
 
-Live tests on 29 and 30 Oct 2026. The research pass on 30 Oct ran at about 05:00 IST, while the 29 Oct run of 12951 was between Kota and Delhi. Pages saved as fixtures.
+Live tests on 29 and 30 Oct and 2 Nov 2026. The research pass on 30 Oct ran at about 05:00 IST, while the 29 Oct run of 12951 was between Kota and Delhi. The 2 Nov captures ran at 06:48 and 09:00 IST, on 12017 and the 1 Nov run of 12951. Pages saved as fixtures.
 
-- **Goibibo** is rendered on the server. The data is in `__NEXT_DATA__`, under `liveStatusApiResponse`. Each halt has `actualArrivalTime`, `actualArrivalDate` and `arrived` and `departed` flags. It ignores `?date=`, but it followed the running 29 Oct run past midnight by itself. Two fetches 6.5 minutes apart were identical, so the response looks cached.
-- **ConfirmTkt** is rendered on the server. Its inline `var data` block is the schedule only. Actual times are in the rendered rows: passed halts have a green tick and an actual time, and upcoming halts show an expected time. It has a date selector from 3 days back to tomorrow. With `?Date=29-Oct-2026` at 04:33 IST it showed the 29 Oct run live. That closes the midnight gap. It is the only source that names the run.
-- **Travelkhana** is one HTML page holding the last 8 runs by start date. Each halt shows actual and scheduled times. It also names the last station passed, with a time.
-- **RailYatri** is rendered on the server. The data is under `__NEXT_DATA__` then `ltsData`, with passed stops (`previous_stations`) and upcoming stops (`upcoming_stations`) in separate arrays. It ignores a date. At 04:33 IST on 30 Oct it showed the 30 Oct run, not started, and the running 29 Oct run was missing. It says it blends phone GPS. Its delay label disagreed with its own times, which is why we compute our own delay.
-- **Railmitra** takes `?day=yesterday`. It lists halts only.
+- **Goibibo** is rendered on the server. The data is in `__NEXT_DATA__`, at `props.pageProps.initialSeoData.data.liveStatusApiResponse`. Each halt has `actualArrivalTime`, `actualArrivalDate` and `arrived` and `departed` flags. The flags decide what has passed, because an upcoming halt can carry a time. The run date is `TrainDetails.StartDate`. The page-level `dateOfJourney` can disagree with the run shown. It ignores `?date=`. It followed the running 29 Oct run at 05:04 IST, but at 09:00 IST on 2 Nov it showed the 2 Nov run, not started, while the 1 Nov run was still on the line. A stale page has no flags and an old `LastUpdated`. It can also answer 200 with the error `TLSV2007` "No data". Two fetches 6.5 minutes apart were identical, so the response looks cached.
+- **ConfirmTkt** is rendered on the server. Its inline `var data` block is the schedule only. Actual times are in the rendered rows: passed halts have a green tick and an actual time, and upcoming halts show an expected time. Rows carry station names only, and codes come from the same page's `Stationcode` list. Rows show `Day N` and `dd-Mon` with no year, so the year comes from the selected date. It has a date selector from 3 days back to tomorrow. With `?Date=29-Oct-2026` at 04:33 IST it showed the 29 Oct run live. That closes the midnight gap. It is the only source that names the run.
+- **Travelkhana** is one HTML page holding the last 8 runs by start date. Each halt shows actual and scheduled times. It also names the last station passed, with a time. A row's status is `Departed`, `Arrived`, `On Time` or `Late by 1hr 30min`. A not-started run can sit above the running one. Its origin departure may be the scheduled time and is not proven actual: 17:00 against ConfirmTkt's 17:07 on the 1 Nov run.
+- **RailYatri** is rendered on the server. The data is under `__NEXT_DATA__` then `ltsData`, with passed stops (`previous_stations`) and upcoming stops (`upcoming_stations`) in separate arrays. On a passed stop `eta` and `etd` are the actual times, within 3 minutes of ConfirmTkt. A halt the train has just left is in neither array until it moves into `previous_stations`, so events come only from that array. The first `upcoming_stations` entry is an empty placeholder. A train at its origin has no `previous_stations` and `at_src` true. It ignores a date. At 04:33 IST on 30 Oct it showed the 30 Oct run, not started, and the running 29 Oct run was missing. It says it blends phone GPS. Its delay label disagreed with its own times, which is why we compute our own delay.
+- **Railmitra** takes `?day=yesterday`. It lists halts only. The circle icon on each row decides what has passed. It can answer 200 with "The train status service is experiencing issues" and no rows.
 - **All of them lag by about 7 minutes.** ConfirmTkt's `Last Updated` was about 10 minutes old.
-- **ConfirmTkt, Goibibo, Travelkhana and Railmitra gave identical times.** They are copies of NTES, so they count as one family. See Step 5.
+- **ConfirmTkt, Goibibo, Travelkhana and Railmitra gave identical times on the 29 Oct run.** On the 1 Nov run ConfirmTkt and Travelkhana differed at every halt: 1 to 2 minutes at most, 4 at Kota and 7 at the origin. They still count as one family, because nothing shows they are independent. See Step 5.
 - ixigo's robots.txt disallows everything. runningstatus.in returns 403.
+
+Not yet seen on any source: a train at a halt, a final arrival on Goibibo or ConfirmTkt, a cancelled or diverted train. A status we don't recognise is a parse error, never a guess.
 
 ### Getting keys
 
@@ -101,9 +103,9 @@ The datameet data has no visible update date. Treat it as old. Cross-check any t
 
 Always ask for a specific run date. A page for the wrong run is the worst bug here: the worker would follow a train that has not started and drop the one that is running.
 
-- Every scrape request names the run date where the site allows it (`?Date=DD-Mon-YYYY` on ConfirmTkt). A source that cannot take a date is used only for the run it currently shows. Goibibo ignores a date, so its page is checked against the run date through the dates on its halts.
+- Every scrape request names the run date where the site allows it (`?Date=DD-Mon-YYYY` on ConfirmTkt). A source that cannot take a date is used only for the run it currently shows. Goibibo ignores a date, so its page is checked against the run date through `TrainDetails.StartDate`.
 - Read the date on the page. Discard any page that shows another date, or none, before a journey is created or matched. The adapter reports it as `wrong_run`. It is not a failure and does not count toward the circuit.
-- After midnight IST the train is still the journey that left origin before midnight. ConfirmTkt with the old date covers it. Goibibo follows the running train by itself. Travelkhana lists the last 8 runs by start date. RailRadar is asked only if all of those fail, once per remaining window.
+- After midnight IST the train is still the journey that left origin before midnight. ConfirmTkt with the old date covers it. Goibibo may show the next run, and a `wrong_run` from it on a running journey moves the check to the next backup that names the run. That is Travelkhana, which lists the last 8 runs by start date. RailRadar is asked only if all of those fail, once per remaining window.
 
 ## When we check
 
@@ -182,6 +184,7 @@ The monthly count is read from `raw_fetches`. Retention clears page bodies and k
 - After 5 failures in a row, open the circuit for 1 hour. No calls to that source until then.
 - HTTP 429 opens the circuit straight away.
 - Parse errors count as failures. A source returning junk is down.
+- A known "no data right now" page, such as Goibibo's `TLSV2007` or Railmitra's service error, gives `isUnavailable` on the parse result. It counts toward backoff and the circuit, but opens no issue, because there is nothing to fix in the parser.
 - An unknown station code counts as a failed read.
 
 ### Blocked sources
@@ -286,7 +289,7 @@ Parsers keep only actual times. Only passed stops become events. Expected or pre
 
 Every source uses `MMCT` for Mumbai Central. Our reference data has `BCT`. That is the only halt mismatch found on 12951.
 
-Do not match by distance. Scrape distances are rounded, and they are up to 4.4 km off at halts and 14 km off at non-halts. Do not match by name. Names vary between sources.
+Do not match by distance. Scrape distances are rounded, and they are up to 4.4 km off at halts and 14 km off at non-halts. Do not match by name across sources, because names vary between them. Joining names to codes inside one page is fine: ConfirmTkt's rows and its `Stationcode` list come from the same page, and a count mismatch is a parse error.
 
 The rules:
 
@@ -351,7 +354,7 @@ Sources belong to families. A family is one upstream.
 
 | Family | Sources | Why |
 |--------|---------|-----|
-| `ntes_copy` | ConfirmTkt, Goibibo, Travelkhana, Railmitra | They gave identical times on 30 Oct. They are copies of NTES. |
+| `ntes_copy` | ConfirmTkt, Goibibo, Travelkhana, Railmitra | They gave identical times on the 29 Oct run and close ones on the 1 Nov run. They appear to be copies of NTES. |
 | `railyatri` | RailYatri | It says it blends phone GPS, so it may differ from NTES. |
 | `railradar` | RailRadar | Its own feed. |
 
