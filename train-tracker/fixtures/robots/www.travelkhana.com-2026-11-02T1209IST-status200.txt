@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Transactional / thin pages — no SEO value
+Disallow: /cart
+Disallow: /checkout
+Disallow: /confirm
+Disallow: /payment/
+Disallow: /travelkhana/jsp/cart.html
+Disallow: /travelkhana/jsp/checkout.html
+Disallow: /travelkhana/jsp/confirm.html
+
+Sitemap: https://www.travelkhana.com/sitemap.xml
