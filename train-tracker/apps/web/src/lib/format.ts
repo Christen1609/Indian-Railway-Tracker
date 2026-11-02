@@ -13,6 +13,7 @@ import type { ArrivalWindow, IsoDate, IsoUtc, TrainState } from '@train-tracker/
 const IST_ZONE = 'Asia/Kolkata';
 const MINUTES_PER_HOUR = 60;
 const MINUTES_PER_DAY = 1440;
+const MS_PER_MINUTE = 60_000;
 const MINOR_DELAY_MIN = 15;
 const JOURNEY_DATE_PARTS: Intl.DateTimeFormatOptions = {
   weekday: 'short',
@@ -62,7 +63,10 @@ export function formatJourneyDate(journeyDate: IsoDate): string {
 
 /** UTC instant as an IST clock */
 export function formatClock(at: IsoUtc): string {
-  const minute = utcToTimetableMinute(istDateOf(at), at); // minutes from midnight IST on its own date, from utcToTimetableMinute
+  const startOfMinute = new Date(
+    Math.floor(Date.parse(at) / MS_PER_MINUTE) * MS_PER_MINUTE,
+  ).toISOString();
+  const minute = utcToTimetableMinute(istDateOf(at), startOfMinute); // minutes from midnight IST on its own date, from utcToTimetableMinute
   return formatIstClock(minute);
 }
 

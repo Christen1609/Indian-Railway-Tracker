@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { IsoDate, Station, TimetableStop, Train, TrainState } from '@train-tracker/core/types';
 import { alongKmOf, nextIndex } from '../map/geometry';
@@ -36,7 +36,15 @@ function scheduleLines(stop: TimetableStop): string[] {
   ].filter((line) => line !== null);
 }
 
-export function StopSheet({ train, stops, stations, events, state, track, journeyDate }: Props) {
+export const StopSheet = memo(function StopSheet({
+  train,
+  stops,
+  stations,
+  events,
+  state,
+  track,
+  journeyDate,
+}: Props) {
   const [isAll, setIsAll] = useState(false);
   const [isOpen, setIsOpen] = useState(() => !window.matchMedia(PHONE_QUERY).matches);
   const listRef = useRef<HTMLOListElement>(null);
@@ -191,4 +199,4 @@ export function StopSheet({ train, stops, stations, events, state, track, journe
       </footer>
     </aside>
   );
-}
+});
