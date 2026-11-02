@@ -20,6 +20,10 @@
       "types": "./dist/sources/goibibo.d.ts",
       "import": "./dist/sources/goibibo.js"
     },
+    "./sources/confirmtkt": {
+      "types": "./dist/sources/confirmtkt.d.ts",
+      "import": "./dist/sources/confirmtkt.js"
+    },
     "./fusion/normalize": {
       "types": "./dist/fusion/normalize.d.ts",
       "import": "./dist/fusion/normalize.js"
