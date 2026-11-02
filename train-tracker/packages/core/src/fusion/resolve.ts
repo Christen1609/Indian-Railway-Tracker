@@ -21,14 +21,22 @@ export type Trust = ReadonlyMap<SourceId, number>;
 
 export const TRUST_PRIOR: Trust = new Map<SourceId, number>([
   ['railradar', 0.8],
+  ['goibibo_scrape', 0.5],
+  ['confirmtkt_scrape', 0.5],
+  ['travelkhana_scrape', 0.5],
   ['railyatri_scrape', 0.5],
+  ['railmitra_scrape', 0.5],
 ]);
 
 export type Families = ReadonlyMap<SourceId, string>;
 
 export const SOURCE_FAMILY: Families = new Map<SourceId, string>([
   ['railradar', 'railradar'],
+  ['goibibo_scrape', 'ntes_copy'],
+  ['confirmtkt_scrape', 'ntes_copy'],
+  ['travelkhana_scrape', 'ntes_copy'],
   ['railyatri_scrape', 'railyatri'],
+  ['railmitra_scrape', 'ntes_copy'],
 ]);
 
 export type SourceRead = { source: SourceId; fetchedAt: IsoUtc; isSuccess: boolean };

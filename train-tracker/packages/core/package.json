@@ -16,6 +16,10 @@
       "types": "./dist/sources/railradar.d.ts",
       "import": "./dist/sources/railradar.js"
     },
+    "./sources/goibibo": {
+      "types": "./dist/sources/goibibo.d.ts",
+      "import": "./dist/sources/goibibo.js"
+    },
     "./fusion/normalize": {
       "types": "./dist/fusion/normalize.d.ts",
       "import": "./dist/fusion/normalize.js"

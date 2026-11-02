@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EventType, RejectReason, SourceEvent, SourceId } from '../types.js';
-import { TRUST_PRIOR, askedSince, confidenceOf, resolveEvents } from './resolve.js';
+import { SOURCE_FAMILY, TRUST_PRIOR, askedSince, confidenceOf, resolveEvents } from './resolve.js';
 import type { SourceRead } from './resolve.js';
 
 const JOURNEY_ID = 'j1';
@@ -324,5 +324,41 @@ describe('TRUST_PRIOR', () => {
   it('rates RailRadar at 0.8 and the scrape at 0.5, as DATA_SOURCES.md says', () => {
     expect(TRUST_PRIOR.get('railradar')).toBe(0.8);
     expect(TRUST_PRIOR.get('railyatri_scrape')).toBe(0.5);
+  });
+});
+
+describe('the scrape sources', () => {
+  const SCRAPES: SourceId[] = [
+    'goibibo_scrape',
+    'confirmtkt_scrape',
+    'travelkhana_scrape',
+    'railyatri_scrape',
+    'railmitra_scrape',
+  ];
+
+  it('rates every scrape at 0.5', () => {
+    for (const source of SCRAPES) {
+      expect(TRUST_PRIOR.get(source)).toBe(0.5);
+    }
+  });
+
+  it('puts the four NTES copies in one family and RailYatri in its own', () => {
+    expect(SOURCE_FAMILY.get('goibibo_scrape')).toBe('ntes_copy');
+    expect(SOURCE_FAMILY.get('confirmtkt_scrape')).toBe('ntes_copy');
+    expect(SOURCE_FAMILY.get('travelkhana_scrape')).toBe('ntes_copy');
+    expect(SOURCE_FAMILY.get('railmitra_scrape')).toBe('ntes_copy');
+    expect(SOURCE_FAMILY.get('railyatri_scrape')).toBe('railyatri');
+  });
+
+  it('reads Goibibo and ConfirmTkt agreeing as medium, one family seen twice', () => {
+    const both: SourceId[] = ['goibibo_scrape', 'confirmtkt_scrape'];
+    const [resolved] = resolveEvents({
+      journeyId: JOURNEY_ID,
+      events: both.map((source) => said({ source, at: '2026-10-21T15:50:00.000Z' })),
+      reads: readsOf(both),
+      resolvedAt: RESOLVED_AT,
+    });
+    expect(resolved?.confidenceScore).toBe(1);
+    expect(resolved?.confidence).toBe('medium');
   });
 });

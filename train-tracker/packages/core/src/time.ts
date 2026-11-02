@@ -1,4 +1,4 @@
-// Features: source timestamps to UTC, IST dates, month start, timetable minutes, elapsed minutes, instants ahead, day offset, IST clock
+// Features: source timestamps to UTC, IST wall times to UTC, IST dates, month start, timetable minutes, elapsed minutes, instants ahead, day offset, IST clock
 
 import { assert } from './types.js';
 import type { IsoDate, IsoUtc } from './types.js';
@@ -7,6 +7,7 @@ const IST_OFFSET_MIN = 330;
 const MINUTES_PER_DAY = 1440;
 const MS_PER_MINUTE = 60_000;
 const OFFSET_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Whether a date string names a day that exists, since Date.parse rolls 30 Feb into March */
@@ -32,6 +33,11 @@ export function toUtc(timestamp: string): IsoUtc | null {
   }
   const ms = Date.parse(timestamp);
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+/** An IST wall clock time on an IST date as UTC, or null if either does not exist */
+export function istWallToUtc(date: IsoDate, clock: string): IsoUtc | null {
+  return CLOCK_TIME.test(clock) ? toUtc(`${date}T${clock}:00+05:30`) : null;
 }
 
 /** IST calendar date of a UTC instant, for the journey date of an origin departure */

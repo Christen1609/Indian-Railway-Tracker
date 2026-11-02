@@ -1,1 +1,2 @@
 * text=auto eol=lf
+train-tracker/fixtures/**/*.html -text
