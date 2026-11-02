@@ -3,6 +3,7 @@ import {
   dayOffset,
   formatIstClock,
   istDateOf,
+  istWallToUtc,
   timetableMinuteToUtc,
   toUtc,
   utcToTimetableMinute,
@@ -157,5 +158,21 @@ describe('formatIstClock', () => {
       '21:16',
       '08:32',
     ]);
+  });
+});
+
+describe('istWallToUtc', () => {
+  it('reads a clock time on an IST date as UTC', () => {
+    expect(istWallToUtc('2026-10-29', '17:02')).toBe('2026-10-29T11:32:00.000Z');
+  });
+
+  it('carries a time before 05:30 back to the previous UTC day', () => {
+    expect(istWallToUtc('2026-10-30', '03:38')).toBe('2026-10-29T22:08:00.000Z');
+  });
+
+  it('refuses a clock or a date that does not exist', () => {
+    expect(istWallToUtc('2026-10-30', '25:61')).toBeNull();
+    expect(istWallToUtc('2026-02-30', '10:00')).toBeNull();
+    expect(istWallToUtc('2026-10-30', 'soon')).toBeNull();
   });
 });
