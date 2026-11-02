@@ -6,6 +6,7 @@ const MERGE_DUPLICATES = 'resolution=merge-duplicates';
 const REPRESENTATION = 'return=representation';
 const FILTERED = '=eq.';
 export const PAGE_SIZE = 1000;
+const DB_TIMEOUT_MS = 15_000;
 
 export type DbConfig = { url: string; serviceRoleKey: string };
 
@@ -24,6 +25,7 @@ export async function readRows(path: string, config: DbConfig): Promise<unknown>
   // the service role headers, from serviceHeaders
   const response = await fetch(`${config.url}/rest/v1/${path}`, {
     headers: serviceHeaders(config),
+    signal: AbortSignal.timeout(DB_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(
@@ -61,6 +63,7 @@ export async function countRows(path: string, config: DbConfig): Promise<number>
   const response = await fetch(`${config.url}/rest/v1/${path}`, {
     method: 'HEAD',
     headers: serviceHeaders(config, 'count=exact'),
+    signal: AbortSignal.timeout(DB_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(
@@ -84,6 +87,7 @@ export async function patchRows(path: string, changes: unknown, config: DbConfig
     method: 'PATCH',
     headers: serviceHeaders(config),
     body: JSON.stringify(changes),
+    signal: AbortSignal.timeout(DB_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`Patch of ${path} failed. Status ${response.status}. ${await response.text()}`);
@@ -97,6 +101,7 @@ export async function deleteRows(path: string, config: DbConfig): Promise<void> 
   const response = await fetch(`${config.url}/rest/v1/${path}`, {
     method: 'DELETE',
     headers: serviceHeaders(config),
+    signal: AbortSignal.timeout(DB_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(
@@ -125,6 +130,7 @@ export async function writeRows(
     method: 'POST',
     headers: serviceHeaders(config, prefer),
     body: JSON.stringify(rows),
+    signal: AbortSignal.timeout(DB_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`Write to ${path} failed. Status ${response.status}. ${await response.text()}`);

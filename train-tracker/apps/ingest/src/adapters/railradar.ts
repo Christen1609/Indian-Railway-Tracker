@@ -4,6 +4,7 @@ import type { RawFetch } from '@train-tracker/core/types';
 
 const BASE_URL = 'https://api.railradar.in/v1';
 const SOURCE = 'railradar';
+const FETCH_TIMEOUT_MS = 15_000;
 
 /** Fetches one train's live status, never throwing */
 export async function fetchRailRadarLive(trainNumber: string, apiKey: string): Promise<RawFetch> {
@@ -12,7 +13,10 @@ export async function fetchRailRadarLive(trainNumber: string, apiKey: string): P
   const base = { source: SOURCE, url } as const;
 
   try {
-    const response = await fetch(url, { headers: { 'x-api-key': apiKey } });
+    const response = await fetch(url, {
+      headers: { 'x-api-key': apiKey },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     return {
       ...base,
       status: response.status,

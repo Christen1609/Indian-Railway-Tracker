@@ -8,7 +8,7 @@ import { normalizeEvents } from '@train-tracker/core/fusion/normalize';
 import { resolveEvents } from '@train-tracker/core/fusion/resolve';
 import { nextCheck } from '@train-tracker/core/schedule/next-check';
 import { parseRailRadarLive } from '@train-tracker/core/sources/railradar';
-import type { IsoDate, IsoUtc, ResolvedEvent, SourceId } from '@train-tracker/core/types';
+import type { IsoDate, IsoUtc, RawFetch, ResolvedEvent, SourceId } from '@train-tracker/core/types';
 import { fetchRailRadarLive } from '../adapters/railradar.js';
 import {
   journeyFor,
@@ -71,41 +71,51 @@ async function gradeNewArrivals(
   return graded;
 }
 
-/** Runs one check of one journey, saving the raw response before anything can fail */
-export async function checkJourney(input: CheckInput): Promise<CheckOutcome | null> {
-  const { trainNumber, config, now } = input;
-  const raw = await fetchRailRadarLive(trainNumber, config.railRadarApiKey); // the response, from fetchRailRadarLive
-  const probe = parseRailRadarLive(raw, ''); // the run it named, from parseRailRadarLive
-  const journeyDate = probe.journeyDate;
-
+/** Saves the source's health after a call, and says whether the call failed */
+async function saveCallHealth(
+  input: CheckInput,
+  raw: RawFetch,
+  parseErrors: number,
+  unknownHalts: number,
+): Promise<boolean> {
   // whether this call counts against the source, from callVerdict
   const verdict = callVerdict({
     status: raw.status,
     hasError: raw.error !== undefined,
-    parseErrors: probe.errors.length,
+    parseErrors,
+    unknownHalts,
   });
   await saveHealth(
     RAILRADAR,
-    verdict.failed ? afterFailure(input.health, now, verdict.isRateLimited) : afterSuccess(),
-    now,
-    config.db,
+    verdict.failed ? afterFailure(input.health, input.now, verdict.isRateLimited) : afterSuccess(),
+    input.now,
+    input.config.db,
   );
+  return verdict.failed;
+}
+
+/** Runs one check of one journey, saving the raw response before anything can fail */
+export async function checkJourney(input: CheckInput): Promise<CheckOutcome | null> {
+  const { trainNumber, config, now } = input;
+  const raw = await fetchRailRadarLive(trainNumber, config.railRadarApiKey); // the response, from fetchRailRadarLive
+  const parsed = parseRailRadarLive(raw, ''); // the run and events it named, from parseRailRadarLive
+  const journeyDate = parsed.journeyDate;
 
   if (journeyDate === null) {
+    await saveCallHealth(input, raw, parsed.errors.length, 0);
     await insertRawFetch(rawFetchRow(raw, NO_JOURNEY), config.db);
     log('warn', 'check_unreadable', {
       source: RAILRADAR,
       trainNumber,
       status: raw.status,
       error: raw.error,
-      errors: probe.errors.join(' | '),
+      errors: parsed.errors.join(' | '),
     });
     return null;
   }
 
   const journey = await journeyFor(trainNumber, journeyDate, config.db); // the journey, from journeyFor
   const rawFetchId = await insertRawFetch(rawFetchRow(raw, journey.id), config.db); // the stored row, from insertRawFetch
-  const parsed = parseRailRadarLive(raw, rawFetchId); // events, from parseRailRadarLive
 
   const [stops, topSpeedKmh, caps, confirmedBefore] = await Promise.all([
     timetableFor(trainNumber, config.db),
@@ -121,14 +131,19 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
   );
 
   // events with the nonsense rules applied, from normalizeEvents
-  const normalized = normalizeEvents(parsed.events, {
-    journeyDate,
-    stops,
-    topSpeedKmh,
-    learnedCaps,
-    confirmed: confirmedBefore,
-    stations,
-  });
+  const normalized = normalizeEvents(
+    parsed.events.map((event) => ({ ...event, rawFetchId })),
+    {
+      journeyDate,
+      stops,
+      topSpeedKmh,
+      learnedCaps,
+      confirmed: confirmedBefore,
+      stations,
+    },
+  );
+  const unknownHalts = normalized.filter((event) => event.rejected === 'unknown_halt').length;
+  const failed = await saveCallHealth(input, raw, parsed.errors.length, unknownHalts); // whether the call failed, from saveCallHealth
   await saveSourceEvents(normalized, journey.id, config.db);
 
   const [events, reads] = await Promise.all([
@@ -142,6 +157,7 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     reads,
     resolvedAt: now,
   });
+  const graded = await gradeNewArrivals(journey.id, confirmedBefore, resolved, config.db); // arrivals graded, from gradeNewArrivals
   await saveResolvedEvents(resolved, config.db);
 
   // where the train is, from estimate
@@ -172,13 +188,10 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
   );
   await saveEstimate(journey.id, where, now, config.db);
 
-  const graded = await gradeNewArrivals(journey.id, confirmedBefore, resolved, config.db); // arrivals graded, from gradeNewArrivals
-
   const rejected = normalized.filter((event) => event.rejected !== undefined).length;
-  const unknownHalts = normalized.filter((event) => event.rejected === 'unknown_halt').length;
   log('info', 'checked', {
     source: RAILRADAR,
-    failed: verdict.failed,
+    failed,
     trainNumber,
     journeyDate,
     status: raw.status,
