@@ -1,4 +1,4 @@
-// Features: source timestamps to UTC, IST wall times to UTC, IST dates, month start, timetable minutes, elapsed minutes, instants ahead, day offset, IST clock
+// Features: month names to dates, days ahead, source timestamps to UTC, IST wall times to UTC, IST dates, month start, timetable minutes, elapsed minutes, instants ahead, day offset, IST clock
 
 import { assert } from './types.js';
 import type { IsoDate, IsoUtc } from './types.js';
@@ -9,6 +9,7 @@ const IST_OFFSET_MIN = 330;
 const MS_PER_MINUTE = 60_000;
 const OFFSET_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Whether a date string names a day that exists, since Date.parse rolls 30 Feb into March */
@@ -96,4 +97,16 @@ export function formatIstClock(minute: number): string {
   const inDay = ((minute % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
   const hours = Math.floor(inDay / 60);
   return `${String(hours).padStart(2, '0')}:${String(inDay % 60).padStart(2, '0')}`;
+}
+
+/** An ISO date from a day, a three-letter month and a year, or null if no such day exists */
+export function dayMonthToIso(day: string, month: string, year: number): IsoDate | null {
+  const number = MONTHS.indexOf(month) + 1;
+  const date = `${year}-${String(number).padStart(2, '0')}-${day.padStart(2, '0')}`;
+  return number > 0 && isRealDate(date) ? date : null;
+}
+
+/** An ISO date a number of days after another */
+export function plusDays(date: IsoDate, days: number): IsoDate {
+  return istDateOf(timetableMinuteToUtc(date, days * MINUTES_PER_DAY));
 }

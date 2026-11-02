@@ -24,6 +24,10 @@
       "types": "./dist/sources/confirmtkt.d.ts",
       "import": "./dist/sources/confirmtkt.js"
     },
+    "./sources/travelkhana": {
+      "types": "./dist/sources/travelkhana.d.ts",
+      "import": "./dist/sources/travelkhana.js"
+    },
     "./fusion/normalize": {
       "types": "./dist/fusion/normalize.d.ts",
       "import": "./dist/fusion/normalize.js"

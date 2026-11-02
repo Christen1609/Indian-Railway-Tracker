@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dayMonthToIso,
   dayOffset,
   formatIstClock,
   istDateOf,
   istWallToUtc,
+  plusDays,
   timetableMinuteToUtc,
   toUtc,
   utcToTimetableMinute,
@@ -174,5 +176,25 @@ describe('istWallToUtc', () => {
     expect(istWallToUtc('2026-10-30', '25:61')).toBeNull();
     expect(istWallToUtc('2026-02-30', '10:00')).toBeNull();
     expect(istWallToUtc('2026-10-30', 'soon')).toBeNull();
+  });
+});
+
+describe('dayMonthToIso', () => {
+  it('reads a day, month and year as an ISO date', () => {
+    expect(dayMonthToIso('9', 'Oct', 2026)).toBe('2026-10-09');
+    expect(dayMonthToIso('31', 'Dec', 2026)).toBe('2026-12-31');
+  });
+
+  it('refuses a month or a day that does not exist', () => {
+    expect(dayMonthToIso('30', 'Feb', 2026)).toBeNull();
+    expect(dayMonthToIso('1', 'Oct.', 2026)).toBeNull();
+  });
+});
+
+describe('plusDays', () => {
+  it('moves a date forward across a month and a year', () => {
+    expect(plusDays('2026-10-29', 1)).toBe('2026-10-30');
+    expect(plusDays('2026-12-31', 1)).toBe('2027-01-01');
+    expect(plusDays('2026-10-29', 0)).toBe('2026-10-29');
   });
 });
