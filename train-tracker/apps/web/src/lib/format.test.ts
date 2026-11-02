@@ -68,6 +68,8 @@ describe('formatClock', () => {
     ['IST afternoon', '2026-10-27T10:00:00.000Z', '15:30'],
     ['IST date ahead of the UTC date', '2026-10-27T19:00:00.000Z', '00:30'],
     ['IST midnight', '2026-10-27T18:30:00.000Z', '00:00'],
+    ['30 seconds into the minute stays in it', '2026-10-27T06:30:31.000Z', '12:00'],
+    ['59 seconds into the minute stays in it', '2026-10-27T06:29:59.999Z', '11:59'],
   ])('%s', (_name, at, expected) => {
     expect(formatClock(at)).toBe(expected);
   });
