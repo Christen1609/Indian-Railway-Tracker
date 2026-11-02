@@ -74,6 +74,29 @@ describe('callVerdict, what counts as a failure', () => {
   });
 });
 
+describe('callVerdict, scrape reads', () => {
+  const PAGE = { status: 200, hasError: false, parseErrors: 0, unknownHalts: 0 };
+
+  it('does not count a page for another run, whatever else it carries', () => {
+    expect(callVerdict({ ...PAGE, isWrongRun: true })).toEqual({
+      failed: false,
+      isRateLimited: false,
+    });
+    expect(callVerdict({ ...PAGE, parseErrors: 2, isWrongRun: true }).failed).toBe(false);
+  });
+
+  it('counts a source that answered with no data, as it is of no use right now', () => {
+    expect(callVerdict({ ...PAGE, isUnavailable: true })).toEqual({
+      failed: true,
+      isRateLimited: false,
+    });
+  });
+
+  it('counts nothing extra when neither flag is set', () => {
+    expect(callVerdict({ ...PAGE, isWrongRun: false, isUnavailable: false }).failed).toBe(false);
+  });
+});
+
 describe('sourceUsable, backing off', () => {
   it('uses a healthy source at once', () => {
     expect(sourceUsable(HEALTHY, NOW)).toEqual({ usable: true, reason: 'ok', readyAt: null });
