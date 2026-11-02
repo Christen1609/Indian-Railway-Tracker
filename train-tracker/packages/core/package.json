@@ -32,6 +32,10 @@
       "types": "./dist/sources/railmitra.d.ts",
       "import": "./dist/sources/railmitra.js"
     },
+    "./sources/railyatri": {
+      "types": "./dist/sources/railyatri.d.ts",
+      "import": "./dist/sources/railyatri.js"
+    },
     "./fusion/normalize": {
       "types": "./dist/fusion/normalize.d.ts",
       "import": "./dist/fusion/normalize.js"
