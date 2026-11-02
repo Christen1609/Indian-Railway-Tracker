@@ -1,6 +1,11 @@
-// Features: check ladders, catch-up freshness, the next check due for a journey
+// Features: check ladders, catch-up freshness, the next check due for a journey, the look for the journey after a finished one
 
-import { minutesBetween, timetableMinuteToUtc, utcToTimetableMinute } from '../time.js';
+import {
+  MINUTES_PER_DAY,
+  minutesBetween,
+  timetableMinuteToUtc,
+  utcToTimetableMinute,
+} from '../time.js';
 import { assert } from '../types.js';
 import type { Estimate, IsoDate, IsoUtc, ResolvedEvent, TimetableStop } from '../types.js';
 
@@ -36,6 +41,13 @@ export type NextCheckInput = {
   lastCheckedAt: IsoUtc | null;
   now: IsoUtc;
   intervals?: CheckIntervals;
+};
+
+export type NextJourneyInput = {
+  journeyDate: IsoDate;
+  stops: readonly TimetableStop[];
+  lastCheckedAt: IsoUtc;
+  departureDelayMin: number;
 };
 
 /** The first rung of a ladder after the last check: the anchor, each gap in turn, then the last gap for ever */
@@ -121,6 +133,19 @@ export function nextCheck(input: NextCheckInput): NextCheck {
 
   const [firstLate, ...laterGaps] = intervals.lateMin;
   assert(firstLate !== undefined, 'at least one late check interval');
-  const lateMin = nextRung(endMin + firstLate, laterGaps, lastMin); // the due minute, from nextRung
+  const gaps = laterGaps.length === 0 ? [firstLate] : laterGaps;
+  const lateMin = nextRung(endMin + firstLate, gaps, lastMin); // the due minute, from nextRung
   return { at: timetableMinuteToUtc(journeyDate, lateMin), reason: 'late' };
+}
+
+/** When to look for the journey after a finished one: the next departure check since the last look */
+export function nextJourneyCheck(input: NextJourneyInput): IsoUtc {
+  const { journeyDate, stops, lastCheckedAt, departureDelayMin } = input;
+  const departureMin = stops[0]?.schedDepMin;
+  assert(departureMin != null, 'a timetabled origin departure');
+
+  const anchorMin = departureMin + departureDelayMin + MINUTES_PER_DAY;
+  const lastMin = utcToTimetableMinute(journeyDate, lastCheckedAt);
+  const dueMin = nextRung(anchorMin, [MINUTES_PER_DAY], lastMin); // the due minute, from nextRung
+  return timetableMinuteToUtc(journeyDate, dueMin);
 }

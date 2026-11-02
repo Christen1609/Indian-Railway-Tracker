@@ -123,7 +123,8 @@ We never check on a timer. We check only when something is due.
 | Window closed, arrival not reported | Wait 7 min for the feeds to catch up. Then mark late, show "Running late. Updating soon." and push the window. Keep checking at 5, 5, 10, 10, then every 15 min. |
 | Arrival confirmed | Lock the delay, update pace, set the next window. No checks until it opens. |
 | Halt at a station | Not checked. Departure is inferred from the halt and confirmed by the next check, if the reply includes it. |
-| Final arrival confirmed | Stop. |
+| Final arrival confirmed | Stop checking this journey. The worker keeps running and checks once at the next journey's departure check. If that check still names the old journey, it tries again at the following day's. |
+| A check fails | The worker keeps running. A bad response waits on the source's backoff and circuit. Any other failure holds that train back on the same backoff, counted in the worker. |
 
 Example: the window for Vadodara is 21:19 to 21:29. Checks at 21:19, 21:24, 21:29. Nothing yet, so the train is late. Checks at 21:34, 21:39, 21:49 and so on until arrival shows.
 

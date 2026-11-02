@@ -23,6 +23,10 @@ import type { DbConfig } from './rest.js';
 
 const JourneyRows = z.array(z.object({ id: z.string().min(1), is_scored: z.boolean() }));
 
+const LatestJourneyRows = z.array(
+  z.object({ id: z.string().min(1), journey_date: z.string().min(1) }),
+);
+
 const StopRows = z.array(
   z.object({
     seq: z.number().int(),
@@ -92,6 +96,8 @@ const UncleanedRows = z.array(
 );
 
 export type JourneyRef = { id: string; isScored: boolean };
+
+export type LatestJourney = { id: string; journeyDate: IsoDate };
 
 export type JourneyEventsRef = { id: string; trainNumber: string; journeyDate: IsoDate };
 
@@ -239,11 +245,11 @@ export async function callsThisMonth(
 export async function latestJourneyFor(
   trainNumber: string,
   config: DbConfig,
-): Promise<JourneyRef | null> {
-  const query = `journeys?train_number=eq.${trainNumber}&select=id,is_scored&order=journey_date.desc&limit=1`;
-  const rows = JourneyRows.parse(await readRows(query, config)); // rows, from readRows
+): Promise<LatestJourney | null> {
+  const query = `journeys?train_number=eq.${trainNumber}&select=id,journey_date&order=journey_date.desc&limit=1`;
+  const rows = LatestJourneyRows.parse(await readRows(query, config)); // rows, from readRows
   const row = rows[0];
-  return row === undefined ? null : { id: row.id, isScored: row.is_scored };
+  return row === undefined ? null : { id: row.id, journeyDate: row.journey_date };
 }
 
 /** The stops of one train in route order, as the estimator wants them */
