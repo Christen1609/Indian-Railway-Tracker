@@ -147,16 +147,9 @@ export function expectedDepartureMin(
 }
 
 /** How far along a section a train has come at one pace, held short of an unconfirmed stop */
-function kmAtPace(
-  section: Section,
-  fromKm: number,
-  elapsedMin: number,
-  pace: number,
-  reachedNext: boolean,
-): number {
+function kmAtPace(section: Section, fromKm: number, elapsedMin: number, pace: number): number {
   const share = elapsedMin / (section.timetabledMin * pace);
-  const ceiling = reachedNext ? 1 : HOLD_SHARE;
-  return fromKm + Math.min(Math.max(share, 0), ceiling) * section.distanceKm;
+  return fromKm + Math.min(Math.max(share, 0), HOLD_SHARE) * section.distanceKm;
 }
 
 /** The latest event of one type, or undefined when none was confirmed */
@@ -243,11 +236,7 @@ export type SectionCapSeen = {
   tripsSeen: number;
 };
 
-/**
- * Section caps after one more journey: a section is recorded the first time it is run,
- * its trip count goes up every time, and its cap moves only when the journey beat the
- * fastest pace we had ever seen there. One row per section the journey actually finished.
- */
+/** Section caps after one more journey, one row per section it finished */
 export function learnCaps(
   known: readonly SectionCapSeen[],
   observed: ReadonlyMap<number, number>,
@@ -360,9 +349,9 @@ export function estimate(input: EstimateInput): Estimate {
   }
 
   const elapsedMin = nowMin - departedAtMin;
-  const km = kmAtPace(section, from.km, elapsedMin, capPace(pace, cap), false); // best guess km, from kmAtPace
-  const loKm = kmAtPace(section, from.km, elapsedMin, slowPace(pace), false);
-  const hiKm = kmAtPace(section, from.km, elapsedMin, fastPace(pace, cap), false);
+  const km = kmAtPace(section, from.km, elapsedMin, capPace(pace, cap)); // best guess km, from kmAtPace
+  const loKm = kmAtPace(section, from.km, elapsedMin, slowPace(pace));
+  const hiKm = kmAtPace(section, from.km, elapsedMin, fastPace(pace, cap));
   const isLate = nowMin > window.endMin;
   const lateBy = to.schedArrMin == null ? null : nowMin - to.schedArrMin;
   const carried = reached === undefined ? null : delayAt(reached.seq, reached.minute);

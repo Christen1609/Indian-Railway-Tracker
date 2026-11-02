@@ -39,10 +39,7 @@ function originDeparture(ctx: NormalizeContext): string | null {
     : timetableMinuteToUtc(ctx.journeyDate, origin.schedDepMin);
 }
 
-/**
- * The fewest minutes the stretch between two stops may be run in, by this train's own
- * section caps, or null when the timetable cannot chain the two together.
- */
+/** The fewest minutes a stretch between two stops may take, or null when unchained */
 function fastestStretchMin(ctx: NormalizeContext, fromSeq: number, toSeq: number): number | null {
   const low = Math.min(fromSeq, toSeq);
   const high = Math.max(fromSeq, toSeq);

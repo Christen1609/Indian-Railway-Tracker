@@ -36,26 +36,38 @@ describe('backoffMin', () => {
 
 describe('callVerdict, what counts as a failure', () => {
   it('passes a clean 200 with nothing unparsed', () => {
-    expect(callVerdict({ status: 200, hasError: false, parseErrors: 0 })).toEqual({
+    expect(callVerdict({ status: 200, hasError: false, parseErrors: 0, unknownHalts: 0 })).toEqual({
       failed: false,
       isRateLimited: false,
     });
   });
 
   it('counts a request that never completed', () => {
-    expect(callVerdict({ status: 0, hasError: true, parseErrors: 0 }).failed).toBe(true);
+    expect(callVerdict({ status: 0, hasError: true, parseErrors: 0, unknownHalts: 0 }).failed).toBe(
+      true,
+    );
   });
 
   it('counts a bad status', () => {
-    expect(callVerdict({ status: 500, hasError: false, parseErrors: 0 }).failed).toBe(true);
+    expect(
+      callVerdict({ status: 500, hasError: false, parseErrors: 0, unknownHalts: 0 }).failed,
+    ).toBe(true);
   });
 
   it('counts junk: a source we cannot parse is a source that is down', () => {
-    expect(callVerdict({ status: 200, hasError: false, parseErrors: 3 }).failed).toBe(true);
+    expect(
+      callVerdict({ status: 200, hasError: false, parseErrors: 3, unknownHalts: 0 }).failed,
+    ).toBe(true);
+  });
+
+  it('counts an unknown station code as a failed read', () => {
+    expect(
+      callVerdict({ status: 200, hasError: false, parseErrors: 0, unknownHalts: 2 }).failed,
+    ).toBe(true);
   });
 
   it('marks 429 as a rate limit, not just a failure', () => {
-    expect(callVerdict({ status: 429, hasError: false, parseErrors: 0 })).toEqual({
+    expect(callVerdict({ status: 429, hasError: false, parseErrors: 0, unknownHalts: 0 })).toEqual({
       failed: true,
       isRateLimited: true,
     });

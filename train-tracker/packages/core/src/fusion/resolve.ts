@@ -142,18 +142,9 @@ function topTrust(cluster: readonly Report[], trust: Trust): number {
   return Math.max(...cluster.map((report) => trustOf(report.source, trust)));
 }
 
-/** The earliest time any report gives */
-function earliestAt(reports: readonly Report[]): IsoUtc {
-  return reports
-    .map((report) => report.at)
-    .reduce((earliest, when) => (minutesBetween(when, earliest) > 0 ? when : earliest));
-}
-
-/** When a cluster was first seen */
-function seenAt(cluster: readonly Report[]): IsoUtc {
-  return cluster
-    .map((report) => report.fetchedAt)
-    .reduce((earliest, when) => (minutesBetween(when, earliest) > 0 ? when : earliest));
+/** The earliest of some times */
+function earliestOf(times: readonly IsoUtc[]): IsoUtc {
+  return times.reduce((earliest, when) => (minutesBetween(when, earliest) > 0 ? when : earliest));
 }
 
 /** The cluster with the most agreement, then the most trust, then the earliest sighting */
@@ -164,7 +155,12 @@ function winnerOf(clusters: readonly Report[][], trust: Trust): Report[] {
       return bySources;
     }
     const byTrust = topTrust(other, trust) - topTrust(one, trust); // most trusted source, from topTrust
-    return byTrust === 0 ? minutesBetween(seenAt(other), seenAt(one)) : byTrust;
+    if (byTrust !== 0) {
+      return byTrust;
+    }
+    const otherSeenAt = earliestOf(other.map((report) => report.fetchedAt)); // when it was first seen, from earliestOf
+    const oneSeenAt = earliestOf(one.map((report) => report.fetchedAt)); // when it was first seen, from earliestOf
+    return minutesBetween(otherSeenAt, oneSeenAt);
   });
   const won = ranked[0];
   assert(won !== undefined, 'a cluster for every event that has a report');
@@ -188,7 +184,7 @@ export function resolveEvents(input: ResolveInput): ResolvedEvent[] {
     // each source's latest word, from latestPerSource
     const asked = [
       ...new Set([
-        ...askedSince(earliestAt(group.reports), input.reads),
+        ...askedSince(earliestOf(group.reports.map((report) => report.at)), input.reads),
         ...group.reports.map((r) => r.source),
       ]),
     ]; // sources that could have known, from askedSince
