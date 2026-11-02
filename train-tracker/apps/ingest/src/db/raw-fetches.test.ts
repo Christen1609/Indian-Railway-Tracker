@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rawFetchRow } from './raw-fetches.js';
+import { rawFetchRow, scrapeStateQueries } from './raw-fetches.js';
 import type { RawFetch } from '@train-tracker/core/types';
 
 const JOURNEY = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
@@ -60,5 +60,32 @@ describe('rawFetchRow', () => {
     for (const value of Object.values(rawFetchRow(fetched({ body: '', status: 0 }), null))) {
       expect(value).not.toBeUndefined();
     }
+  });
+});
+
+describe('scrapeStateQueries', () => {
+  const queries = scrapeStateQueries(
+    'https://www.confirmtkt.com/train-running-status/12951?Date=01-Nov-2026',
+    '2026-11-02T10:00:00.000Z',
+  );
+
+  it('looks only at the five scrape sources, never RailRadar', () => {
+    for (const query of Object.values(queries)) {
+      expect(query).toContain(
+        'source=in.(goibibo_scrape,confirmtkt_scrape,travelkhana_scrape,railyatri_scrape,railmitra_scrape)',
+      );
+      expect(query).not.toContain('railradar');
+    }
+  });
+
+  it('asks for the newest fetch overall and the newest of one page, URL encoded', () => {
+    expect(queries.lastAny).toContain('order=fetched_at.desc&limit=1');
+    expect(queries.lastUrl).toContain(
+      'url=eq.https%3A%2F%2Fwww.confirmtkt.com%2Ftrain-running-status%2F12951%3FDate%3D01-Nov-2026',
+    );
+  });
+
+  it('counts from midnight IST, which is 18:30 UTC the evening before', () => {
+    expect(queries.today).toContain('fetched_at=gte.2026-11-01T18:30:00.000Z');
   });
 });
