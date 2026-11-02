@@ -376,6 +376,7 @@ No journey data outlives its journey by more than a day.
 
 - The browser reads reference data, `journeys`, `train_state` and a view `stop_times` over `resolved_events` without the `sources` column.
 - The browser never reads `raw_fetches`, `source_events`, `source_scores`, `merge_audit` or `resolved_events` directly.
+- A view runs with its owner's rights, so a write through it skips row level security. Supabase grants new views to `anon` in full, so every view the browser reads must have its write grants revoked, as `stop_times` does.
 - `merge_audit` is for the Supabase dashboard only.
 - Only the ingest worker's service key can write.
 
