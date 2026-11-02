@@ -5,7 +5,7 @@ import { DEFAULT_CHECK_INTERVALS } from '@train-tracker/core/schedule/next-check
 import type { CheckIntervals } from '@train-tracker/core/schedule/next-check';
 import type { DbConfig } from './db/rest.js';
 
-const MINUTE_LIST = /^\d+(,\d+)*$/;
+const MINUTE_LIST = /^[1-9]\d*(,[1-9]\d*)*$/;
 const RAILRADAR_BUDGET = 100;
 const RETENTION_HOURS = 24;
 

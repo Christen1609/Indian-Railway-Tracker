@@ -3,8 +3,9 @@
 import { assert } from './types.js';
 import type { IsoDate, IsoUtc } from './types.js';
 
+export const MINUTES_PER_DAY = 1440;
+
 const IST_OFFSET_MIN = 330;
-const MINUTES_PER_DAY = 1440;
 const MS_PER_MINUTE = 60_000;
 const OFFSET_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;

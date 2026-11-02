@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { estimate, expectedDepartureMin, sections } from '../estimate.js';
 import { timetableMinuteToUtc, utcToTimetableMinute } from '../time.js';
 import type { Estimate, EventType, ResolvedEvent } from '../types.js';
-import { nextCheck } from './next-check.js';
+import { DEFAULT_CHECK_INTERVALS, nextCheck, nextJourneyCheck } from './next-check.js';
 import type { NextCheckInput } from './next-check.js';
 import { JOURNEY_DATE, STOPS_12951 as STOPS, TOP_SPEED_KMH } from '../testing/journey-12951.js';
 
@@ -88,6 +88,48 @@ describe('nextCheck, against the worked example in DATA_SOURCES.md', () => {
     expect(dueMin({ ...late, lastCheckedAt: utc(1319) }, 1319)).toBe(1334);
     expect(dueMin({ ...late, lastCheckedAt: utc(1334) }, 1334)).toBe(1349);
     expect(dueMin({ ...late, lastCheckedAt: utc(1500) }, 1500)).toBe(1514);
+  });
+});
+
+describe('nextCheck, a late ladder of one interval', () => {
+  const late = {
+    estimate: running(1279, 1289, { state: 'late' }),
+    intervals: { ...DEFAULT_CHECK_INTERVALS, lateMin: [15] },
+  };
+
+  it('repeats that interval for ever, as .env.example promises', () => {
+    expect(dueMin({ ...late, lastCheckedAt: utc(1289) }, 1289)).toBe(1304);
+    expect(dueMin({ ...late, lastCheckedAt: utc(1304) }, 1304)).toBe(1319);
+    expect(dueMin({ ...late, lastCheckedAt: utc(1319) }, 1319)).toBe(1334);
+  });
+});
+
+describe('nextJourneyCheck, after a journey has finished', () => {
+  const DAY_MIN = 1440;
+  const DEPARTURE_CHECK_MIN = 1022;
+
+  /** The minute of the look for the next journey, after a last check at this minute */
+  const lookMin = (lastCheckedMin: number): number =>
+    minuteOf(
+      nextJourneyCheck({
+        journeyDate: JOURNEY_DATE,
+        stops: STOPS,
+        lastCheckedAt: utc(lastCheckedMin),
+        departureDelayMin: DEFAULT_CHECK_INTERVALS.departureDelayMin,
+      }),
+    );
+
+  it('waits for the departure check of the next day', () => {
+    expect(lookMin(1960)).toBe(DEPARTURE_CHECK_MIN + DAY_MIN);
+  });
+
+  it('moves a day on when the look at that departure found the old journey', () => {
+    expect(lookMin(DEPARTURE_CHECK_MIN + DAY_MIN)).toBe(DEPARTURE_CHECK_MIN + DAY_MIN * 2);
+  });
+
+  it('looks once per departure, however long the worker has been off', () => {
+    const lastCheckedMin = DAY_MIN * 6 + 300;
+    expect(lookMin(lastCheckedMin)).toBe(DEPARTURE_CHECK_MIN + DAY_MIN * 6);
   });
 });
 
