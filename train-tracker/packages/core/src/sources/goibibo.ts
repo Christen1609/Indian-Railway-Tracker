@@ -8,7 +8,7 @@ import type { EventType, IsoDate, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'goibibo_scrape';
 const OK = 200;
-const NEXT_DATA = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/;
+export const NEXT_DATA = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/;
 const DAY_MONTH_YEAR = /^(\d{2})-(\d{2})-(\d{4})/;
 const ORIGIN_ORDER = 0;
 const NO_DATA_CODE = 'TLSV2007';
