@@ -3,11 +3,34 @@
 import { z } from 'zod';
 import { DEFAULT_CHECK_INTERVALS } from '@train-tracker/core/schedule/next-check';
 import type { CheckIntervals } from '@train-tracker/core/schedule/next-check';
+import { SCRAPE_SOURCES } from '@train-tracker/core/schedule/scrape-gate';
+import type { SourceId } from '@train-tracker/core/types';
+import type { TrainSlugs } from './adapters/scrape-sites.js';
 import type { DbConfig } from './db/rest.js';
 
 const MINUTE_LIST = /^[1-9]\d*(,[1-9]\d*)*$/;
 const RAILRADAR_BUDGET = 100;
 const RETENTION_HOURS = 24;
+const DEFAULT_DAILY_CAP = 300;
+
+const TRAIN_SLUGS: Record<string, TrainSlugs> = {
+  '12951': {
+    travelkhana: 'Mumbai-Central---New-Delhi-Tejas-Rajdhani-Express',
+    railmitra: 'mumbai-rajdhani',
+  },
+};
+
+/** Whether a word is the id of a scrape source */
+function isScrapeSource(word: string): word is SourceId {
+  return SCRAPE_SOURCES.some((source) => source === word);
+}
+
+const SourceList = z
+  .string()
+  .transform((list) => list.split(',').map((one) => one.trim()))
+  .refine((list): list is SourceId[] => list.every(isScrapeSource), {
+    message: 'only scrape source ids, separated by commas',
+  });
 
 const Env = z.object({
   RAILRADAR_API_KEY: z.string().min(1),
@@ -17,9 +40,19 @@ const Env = z.object({
   RETENTION_HOURS: z.coerce.number().int().positive().optional(),
   WINDOW_CHECK_INTERVAL_MIN: z.coerce.number().int().positive().optional(),
   LATE_CHECK_INTERVALS_MIN: z.string().regex(MINUTE_LIST).optional(),
+  SCRAPE_ENABLED: z.enum(['true', 'false']).optional(),
+  SCRAPE_SOURCES: SourceList.optional(),
+  SCRAPE_DAILY_CAP: z.coerce.number().int().positive().optional(),
 });
 
 export type Quota = { monthlyBudget: number };
+
+export type ScrapeConfig = {
+  isEnabled: boolean;
+  sources: readonly SourceId[];
+  dailyCap: number;
+  slugs: Readonly<Record<string, TrainSlugs>>;
+};
 
 export type Config = {
   railRadarApiKey: string;
@@ -27,6 +60,7 @@ export type Config = {
   quota: Quota;
   retentionHours: number;
   intervals: CheckIntervals;
+  scrape: ScrapeConfig;
 };
 
 /** The config for this run, validated once so nothing else reads the environment */
@@ -50,6 +84,12 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       lateMin:
         lateMin === undefined ? DEFAULT_CHECK_INTERVALS.lateMin : lateMin.split(',').map(Number),
       departureDelayMin: DEFAULT_CHECK_INTERVALS.departureDelayMin,
+    },
+    scrape: {
+      isEnabled: data.SCRAPE_ENABLED !== 'false',
+      sources: data.SCRAPE_SOURCES ?? SCRAPE_SOURCES,
+      dailyCap: data.SCRAPE_DAILY_CAP ?? DEFAULT_DAILY_CAP,
+      slugs: TRAIN_SLUGS,
     },
   };
 }

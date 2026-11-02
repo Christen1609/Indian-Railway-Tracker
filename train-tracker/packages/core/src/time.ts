@@ -1,4 +1,4 @@
-// Features: month names to dates, days ahead, source timestamps to UTC, IST wall times to UTC, IST dates, month start, timetable minutes, elapsed minutes, elapsed seconds, instants ahead, day offset, IST clock
+// Features: month names to dates, dates for links, days ahead, source timestamps to UTC, IST wall times to UTC, IST dates, month start, timetable minutes, elapsed minutes, elapsed seconds, instants ahead, day offset, IST clock
 
 import { assert } from './types.js';
 import type { IsoDate, IsoUtc } from './types.js';
@@ -119,4 +119,12 @@ export function dayMonthToIso(day: string, month: string, year: number): IsoDate
 /** An ISO date a number of days after another */
 export function plusDays(date: IsoDate, days: number): IsoDate {
   return istDateOf(timetableMinuteToUtc(date, days * MINUTES_PER_DAY));
+}
+
+/** A date as a link writes it, like 01-Nov-2026 */
+export function dayMonthYearOf(date: IsoDate): string {
+  assert(isRealDate(date), `a real date as YYYY-MM-DD, got ${date}`);
+  const month = MONTHS[Number(date.slice(5, 7)) - 1];
+  assert(month !== undefined, `a month of the year in ${date}`);
+  return `${date.slice(8, 10)}-${month}-${date.slice(0, 4)}`;
 }

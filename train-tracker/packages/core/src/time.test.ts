@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dayMonthToIso,
+  dayMonthYearOf,
   dayOffset,
   formatIstClock,
   istDateOf,
@@ -208,5 +209,16 @@ describe('secondsBetween', () => {
 
   it('is negative when the second instant is earlier', () => {
     expect(secondsBetween('2026-10-21T10:01:00.000Z', '2026-10-21T10:00:00.000Z')).toBe(-60);
+  });
+});
+
+describe('dayMonthYearOf', () => {
+  it('writes a date as ConfirmTkt does in a link, with a zero-padded day', () => {
+    expect(dayMonthYearOf('2026-11-01')).toBe('01-Nov-2026');
+    expect(dayMonthYearOf('2026-12-31')).toBe('31-Dec-2026');
+  });
+
+  it('refuses a date that does not exist', () => {
+    expect(() => dayMonthYearOf('2026-02-30')).toThrow();
   });
 });
