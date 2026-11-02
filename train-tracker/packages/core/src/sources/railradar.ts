@@ -29,7 +29,12 @@ const LiveResponse = z.object({
   }),
 });
 
-export type ParseResult = { events: SourceEvent[]; errors: string[]; journeyDate: IsoDate | null };
+export type ParseResult = {
+  events: SourceEvent[];
+  errors: string[];
+  journeyDate: IsoDate | null;
+  isUnavailable?: boolean;
+};
 
 /** Events a stop reports, as type and timestamp pairs, before any are confirmed */
 function reportedTimes(

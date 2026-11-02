@@ -1,14 +1,13 @@
 // Features: ConfirmTkt row schema, reading the page, the ConfirmTkt live parser
 
 import { z } from 'zod';
-import { istWallToUtc } from '../time.js';
+import { dayMonthToIso, istWallToUtc } from '../time.js';
 import { canonicalStationCode } from './stations.js';
 import type { ParseResult } from './railradar.js';
-import type { EventType, IsoDate, RawFetch, SourceEvent } from '../types.js';
+import type { EventType, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'confirmtkt_scrape';
 const OK = 200;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const CODE_SELECT = /<select id="Stationcode"[^>]*>([\s\S]*?)<\/select>/;
 const DATE_SELECT = /<select id="selectdate"[^>]*>([\s\S]*?)<\/select>/;
 const SELECTED_DATE = /<option[^>]*selected="selected"[^>]*value="(\d{2})-([A-Za-z]{3})-(\d{4})"/;
@@ -29,7 +28,7 @@ const Clock = z.string().regex(/^(?:\d{2}:\d{2})?$/);
 const Row = z.object({
   name: z.string().min(1),
   day: z.string().regex(/^\d{1,2}$/),
-  month: z.enum(MONTHS),
+  month: z.string().length(3),
   arrival: Clock,
   departure: Clock,
 });
@@ -108,11 +107,10 @@ export function parseConfirmTktLive(raw: RawFetch, rawFetchId: string): ParseRes
     return failed([`ConfirmTkt row ${unknown.row.name} is passed but is not in the station list.`]);
   }
 
-  const isoOf = (row: z.infer<typeof Row>, year: number): IsoDate =>
-    `${year}-${String(MONTHS.indexOf(row.month) + 1).padStart(2, '0')}-${row.day.padStart(2, '0')}`;
   const firstRow = matched[ORIGIN_ORDER]?.row;
   const askedYear = Number(selected[3]);
-  const journeyDate = firstRow === undefined ? null : isoOf(firstRow, askedYear);
+  const journeyDate =
+    firstRow === undefined ? null : dayMonthToIso(firstRow.day, firstRow.month, askedYear);
   if (journeyDate === null) {
     return failed(['ConfirmTkt page has no origin row.']);
   }
@@ -124,8 +122,12 @@ export function parseConfirmTktLive(raw: RawFetch, rawFetchId: string): ParseRes
     if (halt === undefined || !read.isPassed) {
       continue;
     }
-    const sameYear = isoOf(read.row, askedYear);
-    const date = sameYear < journeyDate ? isoOf(read.row, askedYear + 1) : sameYear;
+    const { day, month } = read.row;
+    const sameYear = dayMonthToIso(day, month, askedYear);
+    const date =
+      sameYear !== null && sameYear < journeyDate
+        ? dayMonthToIso(day, month, askedYear + 1)
+        : sameYear;
     const reported: readonly (readonly [EventType, string])[] = [
       ['ARR', halt.haltOrder > ORIGIN_ORDER ? read.row.arrival : ''],
       ['DEP', read.row.departure],
@@ -134,7 +136,7 @@ export function parseConfirmTktLive(raw: RawFetch, rawFetchId: string): ParseRes
       if (clock === '') {
         continue;
       }
-      const at = istWallToUtc(date, clock); // UTC instant, from istWallToUtc
+      const at = date === null ? null : istWallToUtc(date, clock); // UTC instant, from istWallToUtc
       if (at === null) {
         problems.push(`ConfirmTkt ${halt.code} ${type} time ${date} ${clock} is not a real time.`);
         continue;

@@ -28,6 +28,10 @@
       "types": "./dist/sources/travelkhana.d.ts",
       "import": "./dist/sources/travelkhana.js"
     },
+    "./sources/railmitra": {
+      "types": "./dist/sources/railmitra.d.ts",
+      "import": "./dist/sources/railmitra.js"
+    },
     "./fusion/normalize": {
       "types": "./dist/fusion/normalize.d.ts",
       "import": "./dist/fusion/normalize.js"

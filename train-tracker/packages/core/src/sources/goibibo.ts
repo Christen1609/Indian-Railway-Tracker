@@ -11,6 +11,8 @@ const OK = 200;
 const NEXT_DATA = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/;
 const DAY_MONTH_YEAR = /^(\d{2})-(\d{2})-(\d{4})/;
 const ORIGIN_ORDER = 0;
+const NO_DATA_CODE = 'TLSV2007';
+const NO_DATA_MESSAGE = 'No data';
 const DATE_LENGTH = 10;
 
 const Stop = z.object({
@@ -45,6 +47,20 @@ const Page = z.object({
   }),
 });
 
+const NoData = z.object({
+  props: z.object({
+    pageProps: z.object({
+      initialSeoData: z.object({
+        data: z.object({
+          liveStatusApiResponse: z.object({
+            Error: z.object({ code: z.literal(NO_DATA_CODE), message: z.literal(NO_DATA_MESSAGE) }),
+          }),
+        }),
+      }),
+    }),
+  }),
+});
+
 /** An ISO date from Goibibo's day-month-year date */
 function isoDateOf(dayMonthYear: string): IsoDate {
   return dayMonthYear.slice(0, DATE_LENGTH).replace(DAY_MONTH_YEAR, '$3-$2-$1');
@@ -69,6 +85,10 @@ export function parseGoibiboLive(raw: RawFetch, rawFetchId: string): ParseResult
     json = JSON.parse(block);
   } catch {
     return failed(['Goibibo __NEXT_DATA__ is not JSON.']);
+  }
+
+  if (NoData.safeParse(json).success) {
+    return { events: [], errors: [], journeyDate: null, isUnavailable: true };
   }
 
   const parsed = Page.safeParse(json);

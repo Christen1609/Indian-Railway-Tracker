@@ -10,6 +10,10 @@ const RUNNING = readFileSync(
   'utf8',
 );
 const STALE = readFileSync(join(FIXTURES, '12017-2026-11-02T0650IST-stale-excerpt.html'), 'utf8');
+const NO_DATA = readFileSync(
+  join(FIXTURES, '12017-2026-11-02T0905IST-no-data-excerpt.html'),
+  'utf8',
+);
 const FETCHED_AT = '2026-10-29T23:34:00.000Z';
 const RAW_ID = 'raw-1';
 const OUR_HALTS = new Set(['BCT', 'BVI', 'ST', 'BRC', 'RTM', 'NAD', 'KOTA', 'NDLS']);
@@ -80,6 +84,28 @@ describe('parseGoibiboLive on the stale 12017 page', () => {
 
   it('still names the run, so a caller can check it', () => {
     expect(stale.journeyDate).toBe('2026-11-02');
+  });
+});
+
+describe('parseGoibiboLive on the No data page the site served with a 200', () => {
+  it('reports the source unavailable, with no events and no errors', () => {
+    expect(parseGoibiboLive(fetched(NO_DATA), RAW_ID)).toEqual({
+      events: [],
+      errors: [],
+      journeyDate: null,
+      isUnavailable: true,
+    });
+  });
+
+  it('leaves isUnavailable off a page that carries data, and off a bad one', () => {
+    expect(running.isUnavailable).toBeUndefined();
+    expect(parseGoibiboLive(fetched('<html></html>'), RAW_ID).isUnavailable).toBeUndefined();
+  });
+
+  it('reads any other error code as a parse error', () => {
+    const other = parseGoibiboLive(fetched(NO_DATA.replace('TLSV2007', 'TLSV9999')), RAW_ID);
+    expect(other.isUnavailable).toBeUndefined();
+    expect(other.errors.length).toBeGreaterThan(0);
   });
 });
 
