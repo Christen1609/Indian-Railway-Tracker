@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { matchTrains, noMatchMessage, trackedSummary } from './search';
+import { matchTrains, nextActiveIndex, noMatchMessage, trackedSummary } from './search';
 
 const RAJDHANI = { number: '12951', name: 'Mumbai Rajdhani' };
 const SHATABDI = { number: '12009', name: 'Shatabdi Express' };
+
+describe('nextActiveIndex', () => {
+  it.each([
+    ['down from nothing to the only match', -1, 1, 1, 0],
+    ['down from nothing to the first of three', -1, 1, 3, 0],
+    ['down to the middle', 0, 1, 3, 1],
+    ['down off the end to nothing', 2, 1, 3, -1],
+    ['up from nothing to the last of three', -1, -1, 3, 2],
+    ['up to the middle', 2, -1, 3, 1],
+    ['up off the top to nothing', 0, -1, 3, -1],
+    ['nowhere to go with no matches', -1, 1, 0, -1],
+  ] as const)('%s', (_name, activeIndex, step, count, expected) => {
+    expect(nextActiveIndex(activeIndex, step, count)).toBe(expected);
+  });
+});
 
 describe('matchTrains', () => {
   it.each([
