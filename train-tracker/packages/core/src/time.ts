@@ -1,4 +1,4 @@
-// Features: month names to dates, days ahead, source timestamps to UTC, IST wall times to UTC, IST dates, month start, timetable minutes, elapsed minutes, instants ahead, day offset, IST clock
+// Features: month names to dates, days ahead, source timestamps to UTC, IST wall times to UTC, IST dates, month start, timetable minutes, elapsed minutes, elapsed seconds, instants ahead, day offset, IST clock
 
 import { assert } from './types.js';
 import type { IsoDate, IsoUtc } from './types.js';
@@ -7,6 +7,7 @@ export const MINUTES_PER_DAY = 1440;
 
 const IST_OFFSET_MIN = 330;
 const MS_PER_MINUTE = 60_000;
+const MS_PER_SECOND = 1000;
 const OFFSET_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const CLOCK_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -78,6 +79,15 @@ export function minutesBetween(from: IsoUtc, to: IsoUtc): number {
   assert(!Number.isNaN(fromMs), `a UTC timestamp, got ${from}`);
   assert(!Number.isNaN(toMs), `a UTC timestamp, got ${to}`);
   return Math.round((toMs - fromMs) / MS_PER_MINUTE);
+}
+
+/** Seconds from one UTC instant to another, negative when it runs backwards */
+export function secondsBetween(from: IsoUtc, to: IsoUtc): number {
+  const fromMs = Date.parse(from);
+  const toMs = Date.parse(to);
+  assert(!Number.isNaN(fromMs), `a UTC timestamp, got ${from}`);
+  assert(!Number.isNaN(toMs), `a UTC timestamp, got ${to}`);
+  return (toMs - fromMs) / MS_PER_SECOND;
 }
 
 /** The UTC instant a number of minutes after another */

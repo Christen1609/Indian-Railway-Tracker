@@ -60,6 +60,10 @@
       "types": "./dist/schedule/health.d.ts",
       "import": "./dist/schedule/health.js"
     },
+    "./schedule/scrape-gate": {
+      "types": "./dist/schedule/scrape-gate.d.ts",
+      "import": "./dist/schedule/scrape-gate.js"
+    },
     "./schedule/retention": {
       "types": "./dist/schedule/retention.d.ts",
       "import": "./dist/schedule/retention.js"
