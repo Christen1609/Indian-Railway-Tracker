@@ -1,7 +1,7 @@
 // Features: canonical codes, halt matching, the nonsense rules, the normalize pass
 
 import { sectionCap, sections } from '../estimate.js';
-import { matchHalt } from '../sources/stations.js';
+import { canonicalStationCode, matchHalt } from '../sources/stations.js';
 import type { OurHalt } from '../sources/stations.js';
 import { minutesBetween, timetableMinuteToUtc, toUtc } from '../time.js';
 import type { IsoDate, RejectReason, ResolvedEvent, SourceEvent, TimetableStop } from '../types.js';
@@ -10,6 +10,7 @@ const CLOCK_DRIFT_MIN = 1;
 const BEFORE_START_MIN = 30;
 const MIN_PER_HOUR = 60;
 const PACE_TOLERANCE_MIN = 1;
+const NO_ARRIVALS: ReadonlyMap<string, string> = new Map();
 
 export type NormalizeContext = {
   journeyDate: IsoDate;
@@ -20,9 +21,9 @@ export type NormalizeContext = {
   stations?: ReadonlyMap<string, { lat: number | null; lon: number | null }>;
 };
 
-/** Canonical station code: trimmed and uppercase */
+/** Canonical station code: trimmed, uppercase and through the shared aliases */
 export function canonicalCode(code: string): string {
-  return code.trim().toUpperCase();
+  return canonicalStationCode(code.trim().toUpperCase()); // our code for it, from canonicalStationCode
 }
 
 /** Whether a timestamp is a UTC instant we can do arithmetic on */
@@ -175,6 +176,20 @@ function rejectionFor(
   return null;
 }
 
+/** One event labelled with the rule it broke, left alone when it already carries one */
+function vetted(
+  event: SourceEvent,
+  ctx: NormalizeContext,
+  stopByCode: ReadonlyMap<string, TimetableStop>,
+  arrivalAt: ReadonlyMap<string, string>,
+): SourceEvent {
+  if (event.rejected !== undefined) {
+    return event;
+  }
+  const reason = rejectionFor(event, ctx, stopByCode, arrivalAt); // the rule it broke, from rejectionFor
+  return reason === null ? event : { ...event, rejected: reason };
+}
+
 /** Canonical events with every nonsense rule applied, rejections kept and labelled */
 export function normalizeEvents(
   events: readonly SourceEvent[],
@@ -188,25 +203,26 @@ export function normalizeEvents(
   const halts = ourHalts(ctx); // our halts, from ourHalts
   // halt rows with unknown codes matched or rejected, from withMatchedHalt
   const named = coded.map((event) => withMatchedHalt(event, coded, halts, stopByCode));
+  // arrivals judged first, so only good ones can judge a departure, from vetted
+  const arrivalsVetted = named.map((event) =>
+    event.type === 'ARR' ? vetted(event, ctx, stopByCode, NO_ARRIVALS) : event,
+  );
 
   const arrivalAt = new Map<string, string>();
-  for (const event of named) {
-    if (event.type === 'ARR') {
+  for (const event of arrivalsVetted) {
+    if (event.type === 'ARR' && event.rejected === undefined) {
       arrivalAt.set(event.stationCode, event.at);
     }
   }
   for (const event of ctx.confirmed) {
-    if (event.type === 'ARR' && !arrivalAt.has(event.stationCode)) {
-      arrivalAt.set(canonicalCode(event.stationCode), event.at);
+    const stationCode = canonicalCode(event.stationCode); // canonical code, from canonicalCode
+    if (event.type === 'ARR' && !arrivalAt.has(stationCode)) {
+      arrivalAt.set(stationCode, event.at);
     }
   }
 
-  return named.map((event) => {
-    // the rule it broke, from rejectionFor
-    if (event.rejected !== undefined) {
-      return event;
-    }
-    const reason = rejectionFor(event, ctx, stopByCode, arrivalAt);
-    return reason === null ? event : { ...event, rejected: reason };
-  });
+  // everything else judged against the good arrivals, from vetted
+  return arrivalsVetted.map((event) =>
+    event.type === 'ARR' ? event : vetted(event, ctx, stopByCode, arrivalAt),
+  );
 }

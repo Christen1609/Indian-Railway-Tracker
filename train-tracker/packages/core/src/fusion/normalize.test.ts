@@ -96,6 +96,30 @@ const CASES: Case[] = [
     rejected: [undefined],
   },
   {
+    proves: 'a lowercase padded source alias resolves to our code and survives',
+    events: [ev('  mmct ', 'DEP', '2026-10-21T11:32:00.000Z', '2026-10-21T11:35:00.000Z')],
+    context: ctx(),
+    rejected: [undefined],
+  },
+  {
+    proves: 'an unreadable arrival is bad_format and leaves the departure after it alone',
+    events: [
+      ev('BVI', 'ARR', 'garbage', '2026-10-21T12:10:00.000Z'),
+      ev('BVI', 'DEP', '2026-10-21T12:08:00.000Z', '2026-10-21T12:10:00.000Z'),
+    ],
+    context: ctx(),
+    rejected: ['bad_format', undefined],
+  },
+  {
+    proves: 'a future_time arrival does not reject a good departure as dep_before_arr',
+    events: [
+      ev('BVI', 'ARR', '2026-10-21T12:20:00.000Z', '2026-10-21T12:10:00.000Z'),
+      ev('BVI', 'DEP', '2026-10-21T12:08:00.000Z', '2026-10-21T12:10:00.000Z'),
+    ],
+    context: ctx(),
+    rejected: ['future_time', undefined],
+  },
+  {
     proves: 'a report more than a minute after the fetch is future_time',
     events: [ev('BVI', 'ARR', '2026-10-21T12:12:00.000Z', '2026-10-21T12:10:00.000Z')],
     context: ctx(),
@@ -282,6 +306,11 @@ describe('canonicalCode', () => {
 
   it('leaves a code that is already canonical alone', () => {
     expect(canonicalCode('NDLS')).toBe('NDLS');
+  });
+
+  it('applies the shared aliases after trimming and uppercasing', () => {
+    expect(canonicalCode(' mmct ')).toBe('BCT');
+    expect(canonicalCode('nkot')).toBe('DKNT');
   });
 });
 
