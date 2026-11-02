@@ -31,6 +31,8 @@ export type CallResult = {
   hasError: boolean;
   parseErrors: number;
   unknownHalts: number;
+  isWrongRun?: boolean;
+  isUnavailable?: boolean;
 };
 
 export const HEALTHY: SourceHealth = { failures: NO_FAILURES, lastFailureAt: null, openedAt: null };
@@ -42,12 +44,16 @@ export function backoffMin(failures: number): number {
 
 /** Whether a call counts against a source's health, and whether it was rate limited */
 export function callVerdict(result: CallResult): { failed: boolean; isRateLimited: boolean } {
+  if (result.isWrongRun === true) {
+    return { failed: false, isRateLimited: false };
+  }
   const isRateLimited = result.status === TOO_MANY_REQUESTS;
   const failed =
     result.hasError ||
     result.status !== OK ||
     result.parseErrors > NO_FAILURES ||
     result.unknownHalts > NO_FAILURES ||
+    result.isUnavailable === true ||
     isRateLimited;
   return { failed, isRateLimited };
 }
