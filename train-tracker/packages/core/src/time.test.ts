@@ -5,6 +5,7 @@ import {
   formatIstClock,
   istDateOf,
   istWallToUtc,
+  secondsBetween,
   plusDays,
   timetableMinuteToUtc,
   toUtc,
@@ -196,5 +197,16 @@ describe('plusDays', () => {
     expect(plusDays('2026-10-29', 1)).toBe('2026-10-30');
     expect(plusDays('2026-12-31', 1)).toBe('2027-01-01');
     expect(plusDays('2026-10-29', 0)).toBe('2026-10-29');
+  });
+});
+
+describe('secondsBetween', () => {
+  it('counts whole and part minutes without rounding', () => {
+    expect(secondsBetween('2026-10-21T10:00:00.000Z', '2026-10-21T10:00:59.000Z')).toBe(59);
+    expect(secondsBetween('2026-10-21T10:00:00.000Z', '2026-10-21T10:05:00.500Z')).toBe(300.5);
+  });
+
+  it('is negative when the second instant is earlier', () => {
+    expect(secondsBetween('2026-10-21T10:01:00.000Z', '2026-10-21T10:00:00.000Z')).toBe(-60);
   });
 });
