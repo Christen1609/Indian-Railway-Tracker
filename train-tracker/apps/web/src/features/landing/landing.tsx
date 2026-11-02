@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
 import { Brand } from '../brand/brand';
 import { ROUTES } from '../map/route-12951';
+import { toCandidates } from '../search/search';
 import { SearchField } from '../search/search-field';
 import { formatClock } from '../../lib/format';
 import { useNow, useTrackedTrains } from '../../lib/live';
@@ -18,10 +19,7 @@ export function Landing() {
   const now = useNow();
   const inputRef = useRef<HTMLInputElement>(null);
   const candidates = useMemo(
-    () =>
-      load.kind === 'ready'
-        ? load.trains.map((train) => ({ number: train.number, name: train.name }))
-        : [],
+    () => (load.kind === 'ready' ? toCandidates(load.trains) : []),
     [load],
   );
   useEffect(() => {

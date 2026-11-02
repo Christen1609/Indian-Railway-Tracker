@@ -2,7 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import type { FormEvent, KeyboardEvent, Ref } from 'react';
 import { navigate, trainSearch } from '../../lib/navigation';
 import { FlowButton } from './flow-button';
-import { matchTrains, noMatchMessage } from './search';
+import { matchTrains, nextActiveIndex, noMatchMessage } from './search';
 import type { Candidate } from './search';
 
 type Props = {
@@ -71,7 +71,7 @@ export function SearchField({
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : -1;
       setIsOpen(true);
-      setActiveIndex(((activeIndex + step + matches.length + 1) % (matches.length + 1)) - 1);
+      setActiveIndex(nextActiveIndex(activeIndex, step, matches.length)); // the suggestion one step on, from nextActiveIndex
     }
   }
 

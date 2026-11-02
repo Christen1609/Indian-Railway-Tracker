@@ -158,6 +158,31 @@ export function useLiveJourney(trainNumber: string): Load {
     if (journeyId === undefined) {
       return;
     }
+    let isCurrent = true;
+
+    /** Reloads the live data, keeping the last good view when the read fails */
+    const refresh = () => {
+      loadLive(journeyId).then(
+        (live) => {
+          if (isCurrent) {
+            setLoad((current) =>
+              current.kind === 'ready'
+                ? { kind: 'ready', view: { ...current.view, ...live } }
+                : current,
+            );
+          }
+        },
+        (error: unknown) => console.warn(describeError(error)),
+      );
+    };
+
+    /** Reloads when the tab comes back into view */
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    };
+
     const channel = supabase
       .channel(`train-state-${journeyId}`)
       .on(
@@ -168,20 +193,20 @@ export function useLiveJourney(trainNumber: string): Load {
           table: 'train_state',
           filter: `journey_id=eq.${journeyId}`,
         },
-        () => {
-          loadLive(journeyId).then(
-            (live) =>
-              setLoad((current) =>
-                current.kind === 'ready'
-                  ? { kind: 'ready', view: { ...current.view, ...live } }
-                  : current,
-              ),
-            (error: unknown) => setLoad({ kind: 'error', message: describeError(error) }),
-          );
-        },
+        refresh,
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          refresh();
+        }
+      });
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('online', refresh);
+
     return () => {
+      isCurrent = false;
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('online', refresh);
       void supabase.removeChannel(channel);
     };
   }, [journeyId]);

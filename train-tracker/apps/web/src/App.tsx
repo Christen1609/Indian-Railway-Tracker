@@ -7,12 +7,12 @@ import { alongKmOf, buildTrack, pointAt } from './features/map/geometry';
 import { isDarkPanels, sunAt, sunPhase } from './features/map/lighting';
 import { ROUTES } from './features/map/route-12951';
 import type { ViewMode } from './features/map/train-map';
-import { trackedSummary } from './features/search/search';
+import { toCandidates, trackedSummary } from './features/search/search';
 import { SearchField } from './features/search/search-field';
 import { StatusCard } from './features/status/status-card';
 import { StopSheet } from './features/stops/stop-sheet';
 import { formatClock } from './lib/format';
-import { useLiveJourney, useNow } from './lib/live';
+import { useLiveJourney, useNow, useTrackedTrains } from './lib/live';
 import type { JourneyView } from './lib/live';
 import { useTrainParam } from './lib/navigation';
 
@@ -20,7 +20,8 @@ const TrainMap = lazy(() =>
   import('./features/map/train-map').then((module) => ({ default: module.TrainMap })),
 );
 
-const TRACKED_CANDIDATES = Object.keys(ROUTES).map((number) => ({ number, name: '' }));
+const TRACKED_NUMBERS = Object.keys(ROUTES);
+const TRACKED_CANDIDATES = TRACKED_NUMBERS.map((number) => ({ number, name: '' }));
 
 type Chip = { phase: string; clock: string };
 
@@ -33,12 +34,18 @@ function Frame({
   trainNumber: string;
   children: ReactNode;
 }) {
+  const load = useTrackedTrains(TRACKED_NUMBERS);
+  const candidates = useMemo(
+    () => (load.kind === 'ready' ? toCandidates(load.trains) : TRACKED_CANDIDATES),
+    [load],
+  );
+
   return (
     <div className="ui">
       <div className="bar">
         <Brand />
         <SearchField
-          candidates={TRACKED_CANDIDATES}
+          candidates={candidates}
           inputId="train-search"
           initial={trainNumber}
           ariaLabel="Train number or name"
