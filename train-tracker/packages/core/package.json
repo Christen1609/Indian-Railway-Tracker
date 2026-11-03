@@ -76,6 +76,10 @@
       "types": "./dist/schedule/issue.d.ts",
       "import": "./dist/schedule/issue.js"
     },
+    "./schedule/thin-trip": {
+      "types": "./dist/schedule/thin-trip.d.ts",
+      "import": "./dist/schedule/thin-trip.js"
+    },
     "./schedule/robots": {
       "types": "./dist/schedule/robots.d.ts",
       "import": "./dist/schedule/robots.js"

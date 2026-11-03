@@ -10,7 +10,7 @@ const READ: IssueInput = {
   hasError: false,
   rawFetchId: '42',
   parseErrors: ['stations: expected array, received undefined'],
-  unknownHalts: 0,
+  unknownCodes: [],
 };
 
 describe('issueFor, which reads open an issue', () => {
@@ -45,8 +45,15 @@ describe('issueFor, a failed read', () => {
   });
 
   it('counts unknown stations as a failed read too', () => {
-    const unknown = issueFor({ ...READ, parseErrors: [], unknownHalts: 2 });
-    expect(unknown?.body).toContain('Unknown station codes: 2');
+    const unknown = issueFor({ ...READ, parseErrors: [], unknownCodes: ['XYZ', 'ABC'] });
+    expect(unknown?.body).toContain('Unknown station codes: XYZ, ABC');
+  });
+
+  it('lists only the characters of a station code, and no more than twenty', () => {
+    const codes = Array.from({ length: 30 }, (_one, index) => `S${index}`);
+    const odd = issueFor({ ...READ, parseErrors: [], unknownCodes: ['A<b>', ...codes] });
+    expect(odd?.body).toContain('Ab, S0');
+    expect(odd?.body).not.toContain('S19');
   });
 
   it('keeps long error text short, and no more than five errors', () => {
@@ -75,5 +82,24 @@ describe('issueFor, a block', () => {
   it('gives the status and the id of the reply', () => {
     expect(draft?.body).toContain('HTTP status: 403');
     expect(draft?.body).toContain('raw_fetches id: 42');
+  });
+});
+
+describe('issueFor, a thin trip', () => {
+  const draft = issueFor({
+    outcome: 'thin_trip',
+    trainNumber: '12951',
+    journeyDate: '2026-11-02',
+    confirmed: 2,
+    expected: 6,
+  });
+
+  it('names the train and the date, for the worker only', () => {
+    expect(draft?.title).toBe('Thin trip: 12951 2026-11-02');
+    expect(draft?.labels).toEqual(['worker']);
+  });
+
+  it('says how many arrivals were confirmed out of how many were due', () => {
+    expect(draft?.body).toContain('Arrivals confirmed: 2 of 6');
   });
 });

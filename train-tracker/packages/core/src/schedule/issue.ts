@@ -3,7 +3,9 @@ const MOST_ERRORS = 5;
 const MOST_ERROR_CHARS = 200;
 const ID_CHARS = /[^\w-]/g;
 
-export type IssueInput = {
+const MOST_CODES = 20;
+
+export type ReadIssueInput = {
   outcome: 'ok' | 'wrong_run' | 'unavailable' | 'blocked' | 'failed';
   source: string;
   url: string;
@@ -11,8 +13,18 @@ export type IssueInput = {
   hasError: boolean;
   rawFetchId: string;
   parseErrors: readonly string[];
-  unknownHalts: number;
+  unknownCodes: readonly string[];
 };
+
+export type ThinTripInput = {
+  outcome: 'thin_trip';
+  trainNumber: string;
+  journeyDate: string;
+  confirmed: number;
+  expected: number;
+};
+
+export type IssueInput = ReadIssueInput | ThinTripInput;
 
 export type IssueDraft = { title: string; body: string; labels: string[] };
 
@@ -21,8 +33,21 @@ function readSql(rawFetchId: string): string {
   return `select body from raw_fetches where id = '${rawFetchId.replace(ID_CHARS, '')}';`;
 }
 
+/** The station codes a source used that we do not know, as plain codes */
+function codesLine(codes: readonly string[]): string {
+  const plain = codes.slice(0, MOST_CODES).map((code) => code.replace(ID_CHARS, ''));
+  return `Unknown station codes: ${plain.join(', ')}`;
+}
+
 /** The issue a read calls for, or null when it calls for none */
 export function issueFor(read: IssueInput): IssueDraft | null {
+  if (read.outcome === 'thin_trip') {
+    return {
+      title: `Thin trip: ${read.trainNumber} ${read.journeyDate}`,
+      body: `Arrivals confirmed: ${read.confirmed} of ${read.expected}`,
+      labels: ['worker'],
+    };
+  }
   const facts = [
     `Source: ${read.source}`,
     `URL: ${read.url}`,
@@ -58,7 +83,7 @@ export function issueFor(read: IssueInput): IssueDraft | null {
     .map((one) => `- ${one.slice(0, MOST_ERROR_CHARS)}`);
   const body = [
     ...facts,
-    `Unknown station codes: ${read.unknownHalts}`,
+    codesLine(read.unknownCodes),
     '',
     'Parse errors:',
     ...errors,
