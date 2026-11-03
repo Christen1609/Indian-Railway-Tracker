@@ -1,5 +1,6 @@
 // Features: check ladders, catch-up freshness, the next check due for a journey, the look for the journey after a finished one
 
+import { LAG_MIN } from '../estimate.js';
 import {
   MINUTES_PER_DAY,
   minutesBetween,
@@ -127,14 +128,14 @@ export function nextCheck(input: NextCheckInput): NextCheck {
   const startMin = utcToTimetableMinute(journeyDate, estimate.window.windowStart);
   const endMin = utcToTimetableMinute(journeyDate, estimate.window.windowEnd);
   const openMin = nextRung(startMin, [intervals.windowMin], lastMin); // the due minute, from nextRung
-  if (openMin <= endMin) {
+  if (openMin <= endMin + LAG_MIN) {
     return { at: timetableMinuteToUtc(journeyDate, openMin), reason: 'window_open' };
   }
 
   const [firstLate, ...laterGaps] = intervals.lateMin;
   assert(firstLate !== undefined, 'at least one late check interval');
   const gaps = laterGaps.length === 0 ? [firstLate] : laterGaps;
-  const lateMin = nextRung(endMin + firstLate, gaps, lastMin); // the due minute, from nextRung
+  const lateMin = nextRung(endMin + LAG_MIN + firstLate, gaps, lastMin); // the due minute, from nextRung
   return { at: timetableMinuteToUtc(journeyDate, lateMin), reason: 'late' };
 }
 
