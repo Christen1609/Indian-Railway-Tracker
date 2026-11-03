@@ -1,7 +1,8 @@
-// Features: the raw fetch row, the insert, the reads of a journey, what the scrape gate reads
+// Features: the raw fetch row, the insert, the reads of a journey, what the scrape gate reads, what a check has tried
 
 import { z } from 'zod';
 import { SCRAPE_SOURCES } from '@train-tracker/core/schedule/scrape-gate';
+import type { Tried, TriedOutcome } from '@train-tracker/core/schedule/plan-check';
 import type { RobotsCache } from '@train-tracker/core/schedule/robots';
 import { istDateOf, timetableMinuteToUtc } from '@train-tracker/core/time';
 import type { IsoUtc, RawFetch, SourceId } from '@train-tracker/core/types';
@@ -136,4 +137,47 @@ export async function robotsFor(robotsUrl: string, config: DbConfig): Promise<Ro
         },
         fetchedAt: row.fetched_at,
       };
+}
+
+const RAILRADAR: SourceId = 'railradar';
+
+/** How a stored scrape read went: the error text we gave it says why it was not a plain success */
+export function triedOutcome(row: { status: number; error: string | null }): TriedOutcome {
+  if (row.error === 'wrong_run' || row.error === 'unavailable' || row.error === 'blocked') {
+    return row.error;
+  }
+  return row.status === HTTP_OK && row.error === null ? 'ok' : 'failed';
+}
+
+/** The query for the scrape reads of one journey since a check was due, oldest first */
+export function triedQuery(journeyId: string, since: IsoUtc): string {
+  const sources = `source=in.(${SCRAPE_SOURCES.join(',')})`;
+  return `raw_fetches?journey_id=eq.${journeyId}&${sources}&fetched_at=gte.${since}&select=source,status,error,fetched_at&order=fetched_at.asc,id.asc`;
+}
+
+/** The scrape sources a journey's check has already read since it was due, with how each went */
+export async function triedSince(
+  journeyId: string,
+  since: IsoUtc,
+  config: DbConfig,
+): Promise<Tried[]> {
+  const rows = ReadRows.parse(await readAllRows(triedQuery(journeyId, since), config)); // rows, from readAllRows
+  return rows.map((row) => ({ source: row.source as SourceId, outcome: triedOutcome(row) }));
+}
+
+/** The two queries on a journey's RailRadar rows, which stay after retention clears their bodies */
+export function railRadarQueries(journeyId: string): { calls: string; last: string } {
+  const own = `raw_fetches?journey_id=eq.${journeyId}&source=eq.${RAILRADAR}`;
+  return { calls: own, last: `${own}&${NEWEST_FIRST}` };
+}
+
+/** How many RailRadar calls one journey has cost */
+export async function railRadarCallsFor(journeyId: string, config: DbConfig): Promise<number> {
+  return countRows(railRadarQueries(journeyId).calls, config); // the count, from countRows
+}
+
+/** When RailRadar was last asked about one journey, or null when it never was */
+export async function lastRailRadarAt(journeyId: string, config: DbConfig): Promise<IsoUtc | null> {
+  const rows = ScrapeTimes.parse(await readRows(railRadarQueries(journeyId).last, config)); // rows, from readRows
+  return rows[0]?.fetched_at ?? null;
 }

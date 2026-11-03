@@ -56,6 +56,10 @@
       "types": "./dist/schedule/plan-check.d.ts",
       "import": "./dist/schedule/plan-check.js"
     },
+    "./schedule/run-date": {
+      "types": "./dist/schedule/run-date.d.ts",
+      "import": "./dist/schedule/run-date.js"
+    },
     "./schedule/quota": {
       "types": "./dist/schedule/quota.d.ts",
       "import": "./dist/schedule/quota.js"

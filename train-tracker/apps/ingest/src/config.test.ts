@@ -65,3 +65,23 @@ describe('readConfig, the scrape switches', () => {
     });
   });
 });
+
+describe('readConfig, the RailRadar reserve', () => {
+  it('holds back 20 calls a month when nothing is set', () => {
+    expect(readConfig(ENV).quota).toEqual({ monthlyBudget: 100, demoReserve: 20 });
+  });
+
+  it('takes a reserve from RAILRADAR_DEMO_RESERVE', () => {
+    expect(readConfig({ ...ENV, RAILRADAR_DEMO_RESERVE: '35' }).quota.demoReserve).toBe(35);
+  });
+
+  it('allows no reserve at all', () => {
+    expect(readConfig({ ...ENV, RAILRADAR_DEMO_RESERVE: '0' }).quota.demoReserve).toBe(0);
+  });
+
+  it.each(['-1', 'lots', '2.5'])('refuses a reserve of %s', (reserve) => {
+    expect(() => readConfig({ ...ENV, RAILRADAR_DEMO_RESERVE: reserve })).toThrow(
+      /RAILRADAR_DEMO_RESERVE/,
+    );
+  });
+});

@@ -11,6 +11,7 @@ import type { DbConfig } from './db/rest.js';
 const MINUTE_LIST = /^[1-9]\d*(,[1-9]\d*)*$/;
 const RAILRADAR_BUDGET = 100;
 const RETENTION_HOURS = 24;
+const RAILRADAR_DEMO_RESERVE = 20;
 const DEFAULT_DAILY_CAP = 300;
 
 const TRAIN_SLUGS: Record<string, TrainSlugs> = {
@@ -37,6 +38,7 @@ const Env = z.object({
   SUPABASE_URL: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   RAILRADAR_MONTHLY_BUDGET: z.coerce.number().int().nonnegative().optional(),
+  RAILRADAR_DEMO_RESERVE: z.coerce.number().int().nonnegative().optional(),
   RETENTION_HOURS: z.coerce.number().int().positive().optional(),
   WINDOW_CHECK_INTERVAL_MIN: z.coerce.number().int().positive().optional(),
   LATE_CHECK_INTERVALS_MIN: z.string().regex(MINUTE_LIST).optional(),
@@ -45,7 +47,7 @@ const Env = z.object({
   SCRAPE_DAILY_CAP: z.coerce.number().int().positive().optional(),
 });
 
-export type Quota = { monthlyBudget: number };
+export type Quota = { monthlyBudget: number; demoReserve: number };
 
 export type ScrapeConfig = {
   isEnabled: boolean;
@@ -77,7 +79,10 @@ export function readConfig(env: Record<string, string | undefined>): Config {
   return {
     railRadarApiKey: data.RAILRADAR_API_KEY,
     db: { url: data.SUPABASE_URL, serviceRoleKey: data.SUPABASE_SERVICE_ROLE_KEY },
-    quota: { monthlyBudget: data.RAILRADAR_MONTHLY_BUDGET ?? RAILRADAR_BUDGET },
+    quota: {
+      monthlyBudget: data.RAILRADAR_MONTHLY_BUDGET ?? RAILRADAR_BUDGET,
+      demoReserve: data.RAILRADAR_DEMO_RESERVE ?? RAILRADAR_DEMO_RESERVE,
+    },
     retentionHours: data.RETENTION_HOURS ?? RETENTION_HOURS,
     intervals: {
       windowMin: data.WINDOW_CHECK_INTERVAL_MIN ?? DEFAULT_CHECK_INTERVALS.windowMin,
