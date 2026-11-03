@@ -72,6 +72,10 @@
       "types": "./dist/schedule/scrape-gate.d.ts",
       "import": "./dist/schedule/scrape-gate.js"
     },
+    "./schedule/issue": {
+      "types": "./dist/schedule/issue.d.ts",
+      "import": "./dist/schedule/issue.js"
+    },
     "./schedule/robots": {
       "types": "./dist/schedule/robots.d.ts",
       "import": "./dist/schedule/robots.js"
