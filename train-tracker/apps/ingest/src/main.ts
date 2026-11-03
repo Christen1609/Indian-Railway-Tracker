@@ -4,6 +4,7 @@ import { quotaCheck } from '@train-tracker/core/schedule/quota';
 import type { IsoUtc, SourceId } from '@train-tracker/core/types';
 import { readConfig } from './config.js';
 import { callsThisMonth } from './db/journey-data.js';
+import { sweepJourneys } from './jobs/sweep.js';
 import { log } from './log.js';
 import { watchRound } from './scheduler/watch.js';
 import type { Run } from './scheduler/watch.js';
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
 
     if (soonest === null) {
       log('info', 'nothing_left_to_watch', { watching: watching.join(',') });
+      await sweepJourneys(config, new Date().toISOString()); // clears what is old, from sweepJourneys
       return;
     }
 

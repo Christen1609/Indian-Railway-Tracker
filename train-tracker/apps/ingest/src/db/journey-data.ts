@@ -142,18 +142,12 @@ export async function uncleanedJourneys(config: DbConfig): Promise<UncleanedJour
   }));
 }
 
-/** Whether a journey has been graded, which is what guards its confirmed events */
-export async function hasScores(journeyId: string, config: DbConfig): Promise<boolean> {
-  const counted = await countRows(`window_hits?journey_id=eq.${journeyId}`, config); // the count, from countRows
-  return counted > 0;
+/** Clears the stored page bodies of one journey and keeps the rows, which still count the calls made */
+export async function clearBodiesFor(journeyId: string, config: DbConfig): Promise<void> {
+  await patchRows(`raw_fetches?journey_id=eq.${journeyId}`, { body: null }, config);
 }
 
-/** Deletes the raw responses of one journey, which scoring never needs */
-export async function deleteRawFor(journeyId: string, config: DbConfig): Promise<void> {
-  await deleteRows(`raw_fetches?journey_id=eq.${journeyId}`, config);
-}
-
-/** Deletes everything we worked out about one journey, once its scores are safe */
+/** Deletes everything we worked out about one journey */
 export async function deleteDerivedFor(journeyId: string, config: DbConfig): Promise<void> {
   for (const table of ['source_events', 'resolved_events', 'estimate_log', 'train_state']) {
     await deleteRows(`${table}?journey_id=eq.${journeyId}`, config);
