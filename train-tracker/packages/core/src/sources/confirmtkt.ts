@@ -1,4 +1,4 @@
-// Features: ConfirmTkt row schema, reading the page, the ConfirmTkt live parser
+// Features: ConfirmTkt row schema, reading the page, the ConfirmTkt live parser, the part of a page worth keeping
 
 import { z } from 'zod';
 import { dayMonthToIso, istWallToUtc } from '../time.js';
@@ -18,6 +18,7 @@ const NAME = /rs__station-name[^>]*>([^<]+)</;
 const DAY_DATE = /<span>Day \d+<\/span>(?:&nbsp;|\s)*<span>(\d{1,2})-([A-Za-z]{3})<\/span>/;
 const TIME_CELL = /<div class="col-xs-2">\s*<span>([^<]*)<\/span>/g;
 const TICK = 'bi-check-circle';
+const DISCLAIMER = 'Disclaimer';
 const TRAIN_NUMBER = /"TrainNumberString":"(\d+)"/;
 const ORIGIN_ORDER = 0;
 const FIRST_ARRIVAL = 0;
@@ -157,4 +158,25 @@ export function parseConfirmTktLive(raw: RawFetch, rawFetchId: string): ParseRes
   }
 
   return { events: problems.length > 0 ? [] : events, errors: problems, journeyDate };
+}
+
+/** A ConfirmTkt page cut down to its train number, station list, date list and status rows, or null when it has no rows */
+export function confirmtktTrainData(body: string): string | null {
+  const number = TRAIN_NUMBER.exec(body)?.[0];
+  const codes = CODE_SELECT.exec(body)?.[0];
+  const dates = DATE_SELECT.exec(body)?.[0];
+  const start = body.indexOf(ROWS_START);
+  const lastRow = body.lastIndexOf(ROW_START);
+  const end = body.indexOf(DISCLAIMER, lastRow);
+  if (
+    number === undefined ||
+    codes === undefined ||
+    dates === undefined ||
+    start < 0 ||
+    lastRow < start ||
+    end < 0
+  ) {
+    return null;
+  }
+  return `<script>{${number}}</script>\n${codes}\n${dates}\n<div ${body.slice(start, end)}`;
 }

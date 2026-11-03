@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseConfirmTktLive } from './confirmtkt.js';
+import { confirmtktTrainData, parseConfirmTktLive } from './confirmtkt.js';
 import { parseGoibiboLive } from './goibibo.js';
 import type { RawFetch, SourceEvent } from '../types.js';
 
@@ -140,5 +140,24 @@ describe('parseConfirmTktLive on a bad response', () => {
 
   it('gives no run date when it cannot read one', () => {
     expect(parseConfirmTktLive(fetched('<html></html>'), RAW_ID).journeyDate).toBeNull();
+  });
+});
+
+describe('confirmtktTrainData', () => {
+  it.each([
+    ['a running page', RUNNING, running],
+    ['a page for a run not started', NOT_STARTED, notStarted],
+    ['a page just after departure', JUST_LEFT, justLeft],
+  ])(
+    'keeps the status rows of %s, which the parser reads exactly as before',
+    (_name, page, parsed) => {
+      const kept = confirmtktTrainData(page);
+      expect(kept?.length).toBeLessThan(page.length / 2);
+      expect(parseConfirmTktLive(fetched(kept ?? ''), RAW_ID)).toEqual(parsed);
+    },
+  );
+
+  it('returns null for a page with no status rows', () => {
+    expect(confirmtktTrainData('<html>hello</html>')).toBeNull();
   });
 });

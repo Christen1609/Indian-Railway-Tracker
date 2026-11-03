@@ -1,4 +1,4 @@
-// Features: Travelkhana row schema, finding one run on the page, the Travelkhana live parser
+// Features: Travelkhana row schema, finding one run on the page, the Travelkhana live parser, the part of a page worth keeping
 
 import { z } from 'zod';
 import { dayMonthToIso, istWallToUtc, plusDays } from '../time.js';
@@ -11,6 +11,8 @@ const OK = 200;
 const BLOCK_START = "<span class='dept-head'>Current Station";
 const START_DATE = /Start Date\s*<\/span>\s*<span>(\d{1,2}) ([A-Za-z]{3}) (\d{4})<\/span>/;
 const TRAIN_NUMBER = /track-train\/(\d+)-/;
+const CANONICAL = /<link rel="canonical" href="[^"]*track-train\/\d+-[^"]*"\s*\/?>/;
+const TABLE_END = '</table>';
 const ROW = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
 const CELL = /<td>([\s\S]*?)<\/td>/g;
 const FIRST_SPAN = /<span[^>]*>([^<]*)<\/span>/;
@@ -138,4 +140,15 @@ export function parseTravelkhanaLive(
   }
 
   return { events: errors.length > 0 ? [] : events, errors, journeyDate };
+}
+
+/** A Travelkhana page cut down to its address and the tables of its runs, or null when it has none */
+export function travelkhanaTrainData(body: string): string | null {
+  const canonical = CANONICAL.exec(body)?.[0];
+  const start = body.indexOf(BLOCK_START);
+  const end = body.lastIndexOf(TABLE_END);
+  if (canonical === undefined || start < 0 || end < start) {
+    return null;
+  }
+  return `${canonical}\n${body.slice(start, end + TABLE_END.length)}`;
 }

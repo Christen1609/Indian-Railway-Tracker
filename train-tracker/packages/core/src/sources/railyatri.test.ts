@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseConfirmTktLive } from './confirmtkt.js';
-import { parseRailYatriLive } from './railyatri.js';
+import { parseRailYatriLive, railyatriTrainData } from './railyatri.js';
 import type { RawFetch, SourceEvent } from '../types.js';
 
 const FIXTURES = join(import.meta.dirname, '../../../../fixtures');
@@ -129,4 +129,21 @@ describe('parseRailYatriLive on a bad response', () => {
       expect(result.errors.length).toBeGreaterThan(0);
     });
   }
+});
+
+describe('railyatriTrainData', () => {
+  it('keeps ltsData, a fraction of the page, which the parser still reads exactly as before', () => {
+    const kept = railyatriTrainData(MID_RUN);
+    expect(kept?.length).toBeLessThan(MID_RUN.length / 2);
+    expect(parseRailYatriLive(fetched(kept ?? ''), RAW_ID)).toEqual(midRun);
+  });
+
+  it('keeps a run that has not started as it was', () => {
+    const kept = railyatriTrainData(NOT_STARTED);
+    expect(parseRailYatriLive(fetched(kept ?? ''), RAW_ID)).toEqual(notStarted);
+  });
+
+  it('returns null for a page with no ltsData', () => {
+    expect(railyatriTrainData('<html>hello</html>')).toBeNull();
+  });
 });

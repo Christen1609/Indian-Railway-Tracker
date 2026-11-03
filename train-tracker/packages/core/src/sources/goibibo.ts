@@ -1,4 +1,4 @@
-// Features: Goibibo page schema, the Goibibo live parser
+// Features: Goibibo page schema, the Goibibo live parser, the part of a page worth keeping
 
 import { z } from 'zod';
 import { istWallToUtc } from '../time.js';
@@ -146,4 +146,38 @@ export function parseGoibiboLive(raw: RawFetch, rawFetchId: string): ParseResult
   });
 
   return { events: errors.length > 0 ? [] : events, errors, journeyDate };
+}
+
+/** The part of a __NEXT_DATA__ page at a path, as a page of its own the parser still reads, or null when it is not there */
+export function nextDataPart(body: string, path: readonly string[]): string | null {
+  const block = NEXT_DATA.exec(body)?.[1];
+  let json: unknown;
+  try {
+    json = block === undefined ? undefined : JSON.parse(block);
+  } catch {
+    return null;
+  }
+  let part: unknown = json;
+  for (const key of path) {
+    part =
+      typeof part === 'object' && part !== null
+        ? (part as Record<string, unknown>)[key]
+        : undefined;
+  }
+  if (part === undefined) {
+    return null;
+  }
+  const page = path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), part);
+  return `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify(page)}</script>`;
+}
+
+/** A Goibibo page cut down to liveStatusApiResponse, or null when it holds none */
+export function goibiboTrainData(body: string): string | null {
+  return nextDataPart(body, [
+    'props',
+    'pageProps',
+    'initialSeoData',
+    'data',
+    'liveStatusApiResponse',
+  ]);
 }

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseGoibiboLive } from './goibibo.js';
-import { parseTravelkhanaLive } from './travelkhana.js';
+import { parseTravelkhanaLive, travelkhanaTrainData } from './travelkhana.js';
 import type { RawFetch, SourceEvent } from '../types.js';
 
 const FIXTURES = join(import.meta.dirname, '../../../../fixtures');
@@ -136,4 +136,19 @@ describe('parseTravelkhanaLive on a bad response', () => {
       expect(result.errors.length).toBeGreaterThan(0);
     });
   }
+});
+
+describe('travelkhanaTrainData', () => {
+  it('keeps the tables of every run, which the parser reads exactly as before for each', () => {
+    const kept = travelkhanaTrainData(PAGE);
+    expect(kept?.length).toBeLessThan(PAGE.length);
+    for (const date of ['2026-10-29', '2026-10-28', '2026-10-30']) {
+      const whole = parseTravelkhanaLive(fetched(PAGE), RAW_ID, date);
+      expect(parseTravelkhanaLive(fetched(kept ?? ''), RAW_ID, date)).toEqual(whole);
+    }
+  });
+
+  it('returns null for a page with no run tables', () => {
+    expect(travelkhanaTrainData('<html>hello</html>')).toBeNull();
+  });
 });
