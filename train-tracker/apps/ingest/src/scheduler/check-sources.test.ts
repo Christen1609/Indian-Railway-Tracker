@@ -6,8 +6,8 @@ import { NOT_BLOCKED } from '@train-tracker/core/schedule/scrape-gate';
 import { parseConfirmTktLive } from '@train-tracker/core/sources/confirmtkt';
 import type { SourceEvent } from '@train-tracker/core/types';
 import type { Config } from '../config.js';
-import { saveSourceEvents } from '../db/journey-data.js';
-import { triedSince } from '../db/raw-fetches.js';
+import { callsThisMonth, saveSourceEvents } from '../db/journey-data.js';
+import { lastRailRadarAt, railRadarCallsFor, triedSince } from '../db/raw-fetches.js';
 import { askSources } from './check-sources.js';
 import type { SourcesInput } from './check-sources.js';
 import { readScrape, settleScrape } from './scrape.js';
@@ -28,6 +28,7 @@ const PAGE = readFileSync(
 const RUN = '2026-10-29';
 const NOW = '2026-10-30T04:40:00.000Z';
 const DUE_AT = '2026-10-30T04:38:00.000Z';
+const EVENING = { now: '2026-10-29T15:55:00.000Z', dueAt: '2026-10-29T15:53:00.000Z' };
 const STOPS = [
   { seq: 0, stationCode: 'BCT', km: 0, schedArrMin: null, schedDepMin: 1020 },
   { seq: 1, stationCode: 'BVI', km: 30, schedArrMin: 1040, schedDepMin: 1042 },
@@ -56,6 +57,8 @@ const INPUT: SourcesInput = {
     topSpeedKmh: 130,
     confirmed: [],
   },
+  check: 'window_open',
+  windowStart: '2026-10-30T04:30:00.000Z',
 };
 
 /** A page read from a source, with the real ConfirmTkt events unless others are given */
@@ -109,6 +112,9 @@ function asked(): string[] {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(triedSince).mockResolvedValue([]);
+  vi.mocked(callsThisMonth).mockResolvedValue(0);
+  vi.mocked(railRadarCallsFor).mockResolvedValue(0);
+  vi.mocked(lastRailRadarAt).mockResolvedValue(null);
   vi.mocked(settleScrape).mockImplementation((one) => Promise.resolve(one.outcome));
 });
 
@@ -144,9 +150,10 @@ describe('askSources, a healthy check', () => {
     expect(vi.mocked(settleScrape).mock.calls.map((call) => call[1])).toEqual([0, 0]);
   });
 
-  it('leaves the RailRadar decision for a later step', async () => {
+  it('does not ask RailRadar while the scrapes work', async () => {
     answers(read('confirmtkt_scrape'), read('railyatri_scrape'));
-    expect((await askSources(INPUT)).railRadar).toBeNull();
+    const result = await askSources(INPUT);
+    expect(result.railRadar).toEqual({ ask: false, reason: 'scrapes_ok' });
   });
 
   it('asks nobody for a check an earlier pass already finished', async () => {
@@ -184,10 +191,11 @@ describe('askSources, the gate holding the check', () => {
     expect(saveSourceEvents).toHaveBeenCalledTimes(1);
   });
 
-  it('has no RailRadar decision while held', async () => {
+  it('does not weigh RailRadar while held', async () => {
     answers({ skip: 'too_soon', readyAt: '2026-10-30T04:41:00.000Z' });
     const result = await askSources(INPUT);
     expect(result.railRadar).toBeNull();
+    expect(railRadarCallsFor).not.toHaveBeenCalled();
   });
 
   it('waits a minute when the gate gave no ready time', async () => {
@@ -275,5 +283,71 @@ describe('askSources, unknown halts', () => {
     answers(read('confirmtkt_scrape'), read('railyatri_scrape'), read('travelkhana_scrape'));
     await askSources(INPUT);
     expect(asked()).toEqual(['confirmtkt_scrape', 'railyatri_scrape', 'travelkhana_scrape']);
+  });
+});
+
+describe('askSources, RailRadar after the scrapes', () => {
+  it('asks as a fallback when every scrape was skipped or failed', async () => {
+    const skip = { skip: 'circuit_open' } as const;
+    answers(skip, skip, skip, skip, skip);
+    const result = await askSources(INPUT);
+    expect(result.railRadar).toEqual({ ask: true, reason: 'fallback' });
+  });
+
+  it('asks as a fallback when no scrape gave a read', async () => {
+    vi.mocked(settleScrape).mockResolvedValue('failed');
+    answers(read('confirmtkt_scrape'), read('railyatri_scrape'), read('goibibo_scrape'));
+    answers(read('travelkhana_scrape'), read('railmitra_scrape'));
+    const result = await askSources(INPUT);
+    expect(result.railRadar?.reason).toBe('fallback');
+  });
+
+  it('asks on a scored trip at an arrival even when the scrapes work', async () => {
+    answers(read('confirmtkt_scrape'), read('railyatri_scrape'));
+    const result = await askSources({
+      ...INPUT,
+      ...EVENING,
+      journey: { id: 'j1', isScored: true },
+    });
+    expect(result.railRadar).toEqual({ ask: true, reason: 'scored' });
+  });
+
+  it('is held to one call per timetabled arrival, from the count on this journey', async () => {
+    vi.mocked(railRadarCallsFor).mockResolvedValue(7);
+    answers(read('confirmtkt_scrape'), read('railyatri_scrape'));
+    const result = await askSources({
+      ...INPUT,
+      ...EVENING,
+      journey: { id: 'j1', isScored: true },
+    });
+    expect(result.railRadar).toEqual({ ask: false, reason: 'journey_cap' });
+  });
+
+  it('is held back by the reserve for a scored trip late in the month', async () => {
+    vi.mocked(callsThisMonth).mockResolvedValue(80);
+    answers(read('confirmtkt_scrape'), read('railyatri_scrape'));
+    const result = await askSources({
+      ...INPUT,
+      ...EVENING,
+      journey: { id: 'j1', isScored: true },
+    });
+    expect(result.railRadar).toEqual({ ask: false, reason: 'reserve_held' });
+  });
+
+  it('does not ask twice for one window', async () => {
+    vi.mocked(lastRailRadarAt).mockResolvedValue('2026-10-30T04:35:00.000Z');
+    answers(read('confirmtkt_scrape'), read('railyatri_scrape'));
+    const result = await askSources({
+      ...INPUT,
+      ...EVENING,
+      journey: { id: 'j1', isScored: true },
+    });
+    expect(result.railRadar?.reason).toBe('already_asked');
+  });
+
+  it('never asks on a departure check', async () => {
+    answers(read('confirmtkt_scrape'), read('railyatri_scrape'));
+    const result = await askSources({ ...INPUT, check: 'departure' });
+    expect(result.railRadar).toEqual({ ask: false, reason: 'not_due' });
   });
 });

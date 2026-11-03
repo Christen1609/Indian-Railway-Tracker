@@ -1,18 +1,21 @@
-// Features: asking the scrape sources for one check in order
+// Features: asking the scrape sources for one check in order, then deciding whether RailRadar is worth a call
 
 import { normalizeEvents } from '@train-tracker/core/fusion/normalize';
 import type { NormalizeContext } from '@train-tracker/core/fusion/normalize';
 import { planCheck } from '@train-tracker/core/schedule/plan-check';
 import type { Tried } from '@train-tracker/core/schedule/plan-check';
+import type { CheckReason } from '@train-tracker/core/schedule/next-check';
+import { railRadarPlan } from '@train-tracker/core/schedule/quota';
 import type { RailRadarVerdict } from '@train-tracker/core/schedule/quota';
 import { plusMinutes } from '@train-tracker/core/time';
-import type { IsoUtc, SourceEvent } from '@train-tracker/core/types';
+import type { IsoUtc, SourceEvent, SourceId } from '@train-tracker/core/types';
 import type { Config } from '../config.js';
-import { saveSourceEvents } from '../db/journey-data.js';
-import { triedSince } from '../db/raw-fetches.js';
+import { callsThisMonth, saveSourceEvents } from '../db/journey-data.js';
+import { lastRailRadarAt, railRadarCallsFor, triedSince } from '../db/raw-fetches.js';
 import { readScrape, settleScrape } from './scrape.js';
 import type { ScrapeSkip } from './scrape.js';
 
+const RAILRADAR: SourceId = 'railradar';
 const GATE_HOLDS: readonly ScrapeSkip[] = ['too_soon', 'url_too_soon', 'robots_fetched'];
 const NEXT_REQUEST_MIN = 1;
 const MOST_SOURCES = 5;
@@ -24,6 +27,8 @@ export type SourcesInput = {
   now: IsoUtc;
   dueAt: IsoUtc;
   context: NormalizeContext;
+  check: CheckReason;
+  windowStart: IsoUtc | null;
 };
 
 export type SourcesResult = {
@@ -82,5 +87,24 @@ export async function askSources(input: SourcesInput): Promise<SourcesResult> {
     }
   }
 
-  return { status: 'done', readyAt: null, events, updatedAts, railRadar: null };
+  const [spentThisMonth, callsThisJourney, lastAskedAt] = await Promise.all([
+    callsThisMonth(RAILRADAR, now, config.db), // calls this month, from callsThisMonth
+    railRadarCallsFor(journey.id, config.db), // calls on this journey, from railRadarCallsFor
+    lastRailRadarAt(journey.id, config.db), // the last call on this journey, from lastRailRadarAt
+  ]);
+  // whether RailRadar is worth a call, from railRadarPlan
+  const railRadar = railRadarPlan({
+    ...config.quota,
+    spentThisMonth,
+    callsThisJourney,
+    stops: context.stops,
+    journeyDate: context.journeyDate,
+    now,
+    check: input.check,
+    isScored: journey.isScored,
+    allScrapesFailed: !tried.some((step) => step.outcome === 'ok'),
+    lastAskedAt,
+    windowStart: input.windowStart,
+  });
+  return { status: 'done', readyAt: null, events, updatedAts, railRadar };
 }
