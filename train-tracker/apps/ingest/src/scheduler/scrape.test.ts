@@ -355,21 +355,21 @@ describe('readScrape, a reply that is not usable', () => {
 describe('settleScrape, health and the block', () => {
   it('records a success for a usable read with every station code known', async () => {
     const read = await readOf(replied(CONFIRMTKT_PAGE));
-    expect(await settleScrape(read, 0, CONFIG, NOW)).toBe('ok');
+    expect(await settleScrape(read, [], CONFIG, NOW)).toBe('ok');
     expect(vi.mocked(saveHealth).mock.calls[0]?.[1]).toEqual(HEALTHY);
     expect(saveBlock).not.toHaveBeenCalled();
   });
 
   it('counts one unknown halt as a failed read, which an ok read would not be', async () => {
     const read = await readOf(replied(CONFIRMTKT_PAGE));
-    expect(await settleScrape(read, 1, CONFIG, NOW)).toBe('failed');
+    expect(await settleScrape(read, ['XX1'], CONFIG, NOW)).toBe('failed');
     expect(vi.mocked(saveHealth).mock.calls[0]?.[1]).toMatchObject({ failures: 1 });
     expect(saveBlock).not.toHaveBeenCalled();
   });
 
   it('leaves the circuit alone for a page for another run', async () => {
     const read = await readOf(replied(CONFIRMTKT_PAGE), { ...INPUT, journeyDate: '2026-10-28' });
-    expect(await settleScrape(read, 0, CONFIG, NOW)).toBe('wrong_run');
+    expect(await settleScrape(read, [], CONFIG, NOW)).toBe('wrong_run');
     expect(saveHealth).not.toHaveBeenCalled();
     expect(saveBlock).not.toHaveBeenCalled();
   });
@@ -380,14 +380,14 @@ describe('settleScrape, health and the block', () => {
       replied(NO_DATA_PAGE, { source: 'goibibo_scrape', url: 'https://www.goibibo.com/x' }),
       goibibo,
     );
-    expect(await settleScrape(read, 0, CONFIG, NOW)).toBe('unavailable');
+    expect(await settleScrape(read, [], CONFIG, NOW)).toBe('unavailable');
     expect(vi.mocked(saveHealth).mock.calls[0]?.[1]).toMatchObject({ failures: 1 });
     expect(saveBlock).not.toHaveBeenCalled();
   });
 
   it('moves a source to blocked on a 403, counting it a failure too', async () => {
     const read = await readOf(replied('Forbidden', { status: 403 }));
-    expect(await settleScrape(read, 0, CONFIG, NOW)).toBe('blocked');
+    expect(await settleScrape(read, [], CONFIG, NOW)).toBe('blocked');
     expect(saveBlock).toHaveBeenCalledWith(
       'confirmtkt_scrape',
       { blockedAt: NOW, blockCount: 1 },
@@ -400,20 +400,20 @@ describe('settleScrape, health and the block', () => {
   it('lifts a block when the read works', async () => {
     vi.mocked(blockFor).mockResolvedValue(afterBlock(NOT_BLOCKED, '2026-10-29T04:00:00.000Z'));
     const read = await readOf(replied(CONFIRMTKT_PAGE));
-    await settleScrape(read, 0, CONFIG, NOW);
+    await settleScrape(read, [], CONFIG, NOW);
     expect(saveBlock).toHaveBeenCalledWith('confirmtkt_scrape', NOT_BLOCKED, NOW, CONFIG.db);
   });
 
   it('does not lift a block when the read had an unknown halt', async () => {
     vi.mocked(blockFor).mockResolvedValue(afterBlock(NOT_BLOCKED, '2026-10-29T04:00:00.000Z'));
     const read = await readOf(replied(CONFIRMTKT_PAGE));
-    await settleScrape(read, 2, CONFIG, NOW);
+    await settleScrape(read, ['XX1', 'XX2'], CONFIG, NOW);
     expect(saveBlock).not.toHaveBeenCalled();
   });
 
   it('counts a page it could not read as a failure', async () => {
     const read = await readOf(replied('<html>changed</html>'));
-    expect(await settleScrape(read, 0, CONFIG, NOW)).toBe('failed');
+    expect(await settleScrape(read, [], CONFIG, NOW)).toBe('failed');
     expect(vi.mocked(saveHealth).mock.calls[0]?.[1]).toMatchObject({ failures: 1 });
   });
 });
@@ -426,7 +426,7 @@ describe('settleScrape, issues', () => {
 
   it('opens a parser-fix issue, with the stored row id, for a page it could not read', async () => {
     const read = await readOf(replied('<html>changed</html>'));
-    await settleScrape(read, 0, CONFIG, NOW);
+    await settleScrape(read, [], CONFIG, NOW);
     expect(drafted()?.title).toBe('Parser fix: confirmtkt_scrape failed read');
     expect(drafted()?.body).toContain('raw_fetches id: raw-1');
     expect(drafted()?.body).not.toContain('<html>changed</html>');
@@ -435,30 +435,30 @@ describe('settleScrape, issues', () => {
 
   it('opens a parser-fix issue for a read with an unknown station', async () => {
     const read = await readOf(replied(CONFIRMTKT_PAGE));
-    await settleScrape(read, 1, CONFIG, NOW);
-    expect(drafted()?.body).toContain('Unknown station codes: 1');
+    await settleScrape(read, ['XX1'], CONFIG, NOW);
+    expect(drafted()?.body).toContain('Unknown station codes: XX1');
   });
 
   it('opens a block issue for a 403', async () => {
     const read = await readOf(replied('Forbidden', { status: 403 }));
-    await settleScrape(read, 0, CONFIG, NOW);
+    await settleScrape(read, [], CONFIG, NOW);
     expect(drafted()?.title).toBe('Source blocked: confirmtkt_scrape');
   });
 
   it('opens nothing for a good read, a page for another run, or a site with no data', async () => {
     const good = await readOf(replied(CONFIRMTKT_PAGE));
-    await settleScrape(good, 0, CONFIG, NOW);
+    await settleScrape(good, [], CONFIG, NOW);
     const other = await readOf(replied(CONFIRMTKT_PAGE), { ...INPUT, journeyDate: '2026-10-28' });
-    await settleScrape(other, 0, CONFIG, NOW);
+    await settleScrape(other, [], CONFIG, NOW);
     const goibibo = { ...INPUT, source: 'goibibo_scrape' } as const;
     const none = await readOf(replied(NO_DATA_PAGE, { source: 'goibibo_scrape' }), goibibo);
-    await settleScrape(none, 0, CONFIG, NOW);
+    await settleScrape(none, [], CONFIG, NOW);
     expect(openIssue).not.toHaveBeenCalled();
   });
 
   it('opens nothing for a request that never completed', async () => {
     const read = await readOf(replied('', { status: 0, error: 'timeout' }));
-    await settleScrape(read, 0, CONFIG, NOW);
+    await settleScrape(read, [], CONFIG, NOW);
     expect(openIssue).not.toHaveBeenCalled();
   });
 });

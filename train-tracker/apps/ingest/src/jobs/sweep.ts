@@ -1,5 +1,8 @@
 // Features: the retention sweep
 
+import { issueFor } from '@train-tracker/core/schedule/issue';
+import { arrivalsConfirmed, isThinTrip } from '@train-tracker/core/schedule/thin-trip';
+import { openIssue } from '../adapters/issues.js';
 import { learnCaps, observedPaces } from '@train-tracker/core/estimate';
 import { retentionCheck } from '@train-tracker/core/schedule/retention';
 import type { IsoUtc } from '@train-tracker/core/types';
@@ -54,6 +57,18 @@ export async function sweepJourneys(config: Config, now: IsoUtc): Promise<void> 
 
     await clearBodiesFor(journey.id, config.db);
     if (verdict.deleteDerived) {
+      if (isThinTrip(stops, confirmed)) {
+        const counts = arrivalsConfirmed(stops, confirmed); // the arrivals confirmed, from arrivalsConfirmed
+        const draft = issueFor({
+          outcome: 'thin_trip',
+          trainNumber: journey.trainNumber,
+          journeyDate: journey.journeyDate,
+          ...counts,
+        });
+        if (draft !== null) {
+          await openIssue(draft, config.issues, now);
+        }
+      }
       // what this run managed on each section, from observedPaces
       const ran = observedPaces(stops, confirmed, journey.journeyDate);
       const known = await sectionCapsFor(journey.trainNumber, config.db); // the record so far, from sectionCapsFor

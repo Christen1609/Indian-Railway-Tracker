@@ -144,10 +144,10 @@ describe('askSources, a healthy check', () => {
     expect(result.updatedAts).toEqual(['2026-10-30T04:25:00.000Z', '2026-10-30T04:35:00.000Z']);
   });
 
-  it('settles each read with the count of unknown halts after its events are checked', async () => {
+  it('settles each read with the unknown station codes after its events are checked', async () => {
     answers(read('confirmtkt_scrape'), read('railyatri_scrape'));
     await askSources(INPUT);
-    expect(vi.mocked(settleScrape).mock.calls.map((call) => call[1])).toEqual([0, 0]);
+    expect(vi.mocked(settleScrape).mock.calls.map((call) => call[1])).toEqual([[], []]);
   });
 
   it('does not ask RailRadar while the scrapes work', async () => {
@@ -260,7 +260,7 @@ describe('askSources, a page for another run', () => {
 });
 
 describe('askSources, unknown halts', () => {
-  it('counts the events rejected as unknown_halt and settles with that count', async () => {
+  it('lists the events rejected as unknown_halt and settles with their codes', async () => {
     const stranger: SourceEvent = {
       source: 'confirmtkt_scrape',
       trainNumber: '12951',
@@ -275,7 +275,7 @@ describe('askSources, unknown halts', () => {
     };
     answers(read('confirmtkt_scrape', { events: [stranger] }), read('railyatri_scrape'));
     await askSources(INPUT);
-    expect(vi.mocked(settleScrape).mock.calls[0]?.[1]).toBe(1);
+    expect(vi.mocked(settleScrape).mock.calls[0]?.[1]).toEqual(['ZZZZ']);
   });
 
   it('keeps a read as a failure when settling says an unknown halt made it one', async () => {

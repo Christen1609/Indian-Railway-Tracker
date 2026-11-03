@@ -72,9 +72,12 @@ export async function askSources(input: SourcesInput): Promise<SourcesResult> {
 
     // events with the nonsense rules applied, from normalizeEvents
     const normalized = normalizeEvents(result.parsed.events, context);
-    const unknownHalts = normalized.filter((event) => event.rejected === 'unknown_halt').length;
+    // the codes we do not know, from normalizeEvents
+    const unknownCodes = normalized
+      .filter((event) => event.rejected === 'unknown_halt')
+      .map((event) => event.stationCode);
     // how the read counts for the source, from settleScrape
-    const outcome = await settleScrape(result, unknownHalts, config, now);
+    const outcome = await settleScrape(result, unknownCodes, config, now);
     tried.push({ source, outcome });
 
     if (outcome === 'wrong_run') {

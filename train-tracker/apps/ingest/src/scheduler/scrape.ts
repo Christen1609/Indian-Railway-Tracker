@@ -253,11 +253,11 @@ export async function readScrape(input: ScrapeInput): Promise<ScrapeResult> {
 /** Records how a read went for the source, once its station codes are checked: health, the block, then any issue */
 export async function settleScrape(
   read: ScrapeRead,
-  unknownHalts: number,
+  unknownCodes: readonly string[],
   config: Config,
   now: IsoUtc,
 ): Promise<ReadOutcome> {
-  const verdict = callVerdict({ ...read.call, unknownHalts }); // whether this counts against the source, from callVerdict
+  const verdict = callVerdict({ ...read.call, unknownHalts: unknownCodes.length }); // whether this counts against the source, from callVerdict
   const outcome = read.outcome === 'ok' && verdict.failed ? 'failed' : read.outcome;
 
   if (outcome !== 'wrong_run') {
@@ -282,7 +282,7 @@ export async function settleScrape(
     hasError: read.raw.error !== undefined,
     rawFetchId: read.rawFetchId,
     parseErrors: read.parsed.errors,
-    unknownHalts,
+    unknownCodes,
   });
   if (draft !== null) {
     await openIssue(draft, config.issues, now);
