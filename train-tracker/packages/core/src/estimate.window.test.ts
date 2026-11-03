@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { arrivalWindow, estimate, expectedDepartureMin, sectionCap, sections } from './estimate.js';
+import {
+  LAG_MIN,
+  arrivalWindow,
+  estimate,
+  expectedDepartureMin,
+  sectionCap,
+  sections,
+} from './estimate.js';
 import type { EstimateInput } from './estimate.js';
 import { timetableMinuteToUtc, utcToTimetableMinute } from './time.js';
 import type { EventType, ResolvedEvent } from './types.js';
@@ -232,6 +239,51 @@ describe('estimate when the window has passed with no arrival', () => {
 
   it('holds at 98 per cent of the section', () => {
     expect(result.km).toBeCloseTo(30 + 0.98 * 233.6, 1);
+  });
+});
+
+describe('estimate, the lag after a window closes', () => {
+  const confirmed = [at('BCT', 'DEP', 1020), at('BVI', 'ARR', 1040), at('BVI', 'DEP', 1042)];
+  const closed = estimate(input(1042, { confirmed })).window;
+  const endMin = utcToTimetableMinute(JOURNEY_DATE, closed?.windowEnd ?? '');
+
+  it('waits 7 minutes for the feeds to catch up', () => {
+    expect(LAG_MIN).toBe(7);
+  });
+
+  it('is still running at the minute the window closes and for 7 minutes after', () => {
+    expect(estimate(input(endMin, { confirmed })).state).toBe('running');
+    expect(estimate(input(endMin + LAG_MIN, { confirmed })).state).toBe('running');
+  });
+
+  it('turns late the minute after the lag is spent', () => {
+    expect(estimate(input(endMin + LAG_MIN + 1, { confirmed })).state).toBe('late');
+  });
+
+  it('carries the last confirmed delay through the lag, not the minutes since the window closed', () => {
+    const waiting = estimate(input(endMin + LAG_MIN, { confirmed }));
+    expect(waiting.delayMin).toBe(0);
+  });
+});
+
+describe('estimate, a stalled feed', () => {
+  const confirmed = [at('BCT', 'DEP', 1020), at('BVI', 'ARR', 1040), at('BVI', 'DEP', 1042)];
+
+  it('never reads as late, however long the window has been closed', () => {
+    const stalled = estimate(input(1300, { confirmed, isFeedStalled: true }));
+    expect(stalled.state).toBe('running');
+    expect(stalled.delayMin).toBe(0);
+  });
+
+  it('reads as late once the feed is back and still has no arrival', () => {
+    expect(estimate(input(1300, { confirmed, isFeedStalled: false })).state).toBe('late');
+    expect(estimate(input(1300, { confirmed })).state).toBe('late');
+  });
+
+  it('changes nothing but the late state: the window and the position are the same', () => {
+    const live = estimate(input(1300, { confirmed }));
+    const stalled = estimate(input(1300, { confirmed, isFeedStalled: true }));
+    expect({ ...stalled, state: live.state, delayMin: live.delayMin }).toEqual(live);
   });
 });
 

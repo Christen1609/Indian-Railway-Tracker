@@ -94,12 +94,15 @@ export function capPace(pace: number, cap: number): number {
 
 export type MinuteWindow = { startMin: number; endMin: number };
 
+export const LAG_MIN = 7;
+
 export type EstimateInput = {
   journeyDate: IsoDate;
   stops: readonly TimetableStop[];
   confirmed: readonly ResolvedEvent[];
   topSpeedKmh: number | null;
   learnedCaps?: ReadonlyMap<number, number>;
+  isFeedStalled?: boolean;
   now: IsoUtc;
 };
 
@@ -352,7 +355,7 @@ export function estimate(input: EstimateInput): Estimate {
   const km = kmAtPace(section, from.km, elapsedMin, capPace(pace, cap)); // best guess km, from kmAtPace
   const loKm = kmAtPace(section, from.km, elapsedMin, slowPace(pace));
   const hiKm = kmAtPace(section, from.km, elapsedMin, fastPace(pace, cap));
-  const isLate = nowMin > window.endMin;
+  const isLate = nowMin > window.endMin + LAG_MIN && input.isFeedStalled !== true;
   const lateBy = to.schedArrMin == null ? null : nowMin - to.schedArrMin;
   const carried = reached === undefined ? null : delayAt(reached.seq, reached.minute);
 
