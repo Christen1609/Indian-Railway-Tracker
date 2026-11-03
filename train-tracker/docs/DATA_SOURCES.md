@@ -6,17 +6,17 @@ There is no official public API for live Indian train positions. Indian Railways
 
 Everything here is free. Nothing may need a card. Last checked: 30 Oct 2026. Recheck quotas before each milestone.
 
-Page scrapes carry every check. Goibibo and ConfirmTkt are the main scrapes. Travelkhana and RailYatri are backups, and Railmitra is a spare. RailRadar runs on scored trips and as the fallback when the scrapes fail. When RailRadar's budget is spent, the worker keeps tracking on the scrapes. Decided 30 Oct 2026, widened the same day after a research pass over more sites.
+Page scrapes carry every check. Each check reads ConfirmTkt for the run date, then RailYatri for a second family. Goibibo stands in when RailYatri isn't usable. Travelkhana is the backup when ConfirmTkt fails, and Railmitra is the spare. RailRadar runs on scored trips and as the fallback when the scrapes fail. When RailRadar's budget is spent, the worker keeps tracking on the scrapes. Decided 30 Oct 2026, and the order was settled on 3 Nov once Goibibo's robots.txt proved unreachable.
 
 ## Live sources
 
 | ID | Source | Auth | Env var | Free quota | Use it for | Risk |
 |----|--------|------|---------|-----------|------------|------|
-| `railradar` | RailRadar API, `https://api.railradar.in/v1` | `Authorization: Bearer <key>` or `X-API-Key` | `RAILRADAR_API_KEY` | 100 requests/month (sandbox, no card) | Scored trips and fallback. Per-train live status and the snapshot. About 6 calls a trip, about 20 a month held in reserve. | Snapshot endpoint is marked legacy. |
-| `goibibo_scrape` | Goibibo live status page, `https://www.goibibo.com/trains/live-train-status/<number>-running-status/` | None | None | Self-imposed: 1 request per minute across all scrape sites | Main source. Every check. | HTML can change any day. Ignores a date, and cannot be relied on after midnight: it can show the next run while the last one is still running. Its response looks cached. |
+| `railradar` | RailRadar API, `https://api.railradar.in/v1` | `Authorization: Bearer <key>` or `X-API-Key` | `RAILRADAR_API_KEY` | 100 requests/month (sandbox, no card) | Scored trips and fallback. Per-train live status and the snapshot. At most one call per timetabled arrival (7 on 12951), and 20 a month held in reserve. | Snapshot endpoint is marked legacy. |
+| `goibibo_scrape` | Goibibo live status page, `https://www.goibibo.com/trains/live-train-status/<number>-running-status/` | None | None | Self-imposed: 1 request per minute across all scrape sites | Second opinion, used when RailYatri isn't usable. It is the same family as ConfirmTkt. Off while its robots.txt is unreachable, which it has been since 2 Nov. | HTML can change any day. Ignores a date, and cannot be relied on after midnight: it can show the next run while the last one is still running. Its response looks cached. |
 | `confirmtkt_scrape` | ConfirmTkt running status page, `https://www.confirmtkt.com/train-running-status/<number>?Date=DD-Mon-YYYY` | None | None | Same shared limit | Main source. Every check. The only source that names the run, through the date parameter. | HTML can change any day. Actual times are in the rendered rows. |
 | `travelkhana_scrape` | Travelkhana track-train page, `https://www.travelkhana.com/travelkhana/track-train/<number>-…` | None | None | Same shared limit | Backup. | HTML can change any day. One page holds the last 8 runs. The URL carries a name slug, so it needs one per train. |
-| `railyatri_scrape` | RailYatri live status page, `https://www.railyatri.in/live-train-status/<number>` | None | None | Same shared limit | Backup. Its own family, since it says it blends phone GPS. | Shows only the current run, so it cannot cover a train after midnight. |
+| `railyatri_scrape` | RailYatri live status page, `https://www.railyatri.in/live-train-status/<number>` | None | None | Same shared limit | Second source on every check, while the page shows our run. Its own family, since it says it blends phone GPS. | Shows only the current run, so it cannot cover a train after midnight. |
 | `railmitra_scrape` | Railmitra running status page, `…/live-train-running-status/<slug>-<number>?day=yesterday` | None | None | Same shared limit | Spare. Halts only. | The URL carries a name slug. It can answer with a service-error page. |
 
 RailRadar endpoints we use:
@@ -128,7 +128,7 @@ We never check on a timer. We check only when something is due.
 | Final arrival confirmed | Stop checking this journey. The worker keeps running and checks once at the next journey's departure check. If that check still names the old journey, it tries again at the following day's. |
 | A check fails | The worker keeps running. A bad response waits on the source's backoff and circuit. Any other failure holds that train back on the same backoff, counted in the worker. |
 
-Example: the window for Vadodara is 21:19 to 21:29. Checks at 21:19, 21:24, 21:29. Nothing yet, so the train is late. Checks at 21:34, 21:39, 21:49 and so on until arrival shows.
+Example: the window for Vadodara is 21:19 to 21:29. Checks at 21:19, 21:24, 21:29, and 21:34 during the 7-minute lag. Nothing yet, so at 21:36 the train is late. Checks at 21:41, 21:46, 21:56, 22:06, 22:21 and so on until arrival shows.
 
 There is no check in the middle of long sections. On Kota to New Delhi that means about 5 hours without a check. If the train stops halfway, we show it on pace until the window opens. Accepted to save calls.
 
@@ -144,25 +144,26 @@ There is no check in the middle of long sections. On Kota to New Delhi that mean
 
 ### What one check does
 
-1. Fetch Goibibo and ConfirmTkt, each for the journey's run date, inside the rate limits below. When one fails, use the next backup: Travelkhana, then RailYatri. Railmitra is the spare.
-2. Parse. Only passed stops become events.
-3. Call RailRadar only on a scored trip, or when the scrapes failed or have not reported an arrival that is due.
+1. Work out the run date from the timetable and the clock, never from a page. Yesterday's run stays current until it has arrived or been cancelled, or 6 hours after its scheduled final arrival. Find or create the journey before any fetch.
+2. Ask the scrapes one at a time, in `planCheck` order: ConfirmTkt, then RailYatri, then Goibibo if RailYatri wasn't ok. Travelkhana comes in if ConfirmTkt wasn't ok, and Railmitra only if none was. A skip moves to the next source. A gate hold ends the pass, and the worker sleeps until the gate allows the next fetch. The check is already due, so this isn't a timer. A restarted worker carries on from this journey's `raw_fetches` since the check was due.
+3. Parse. Only passed stops become events. A page for another run is a `wrong_run` and adds nothing.
+4. Ask RailRadar only when `railRadarPlan` says so: at most once per timetabled arrival and once per window. That covers a scored trip before midnight, and a fallback when every scrape failed. A journey past midnight IST asks only as a fallback, because RailRadar's live endpoint takes no date.
 
 ### Lag and a stalled feed
 
 The scrapes run about 7 minutes behind. An arrival can be real and not yet on the page.
 
 - The window closes. Wait 7 minutes before showing "Running late". Checks continue during the wait.
-- Each page has an update time. When it is old, the feed has stalled. That means "no news", not "not arrived". The web app shows a live "searching" line, not "Running late".
+- Each page has an update time. When even the newest page of a check is over 30 minutes old, the feed has stalled. That means "no news", not "not arrived": the journey isn't marked late, and the web app shows its live "searching" line. Goibibo, RailYatri, ConfirmTkt and Travelkhana give an update time. Railmitra prints no year, so its time isn't read.
 
 ### Quota guard
 
 Free tiers are tiny, so spending is controlled in code.
 
 - Each source has `monthlyBudget` and `demoReserve` in config.
-- Development spends from `monthlyBudget - demoReserve`, paced evenly: allowed so far = `(monthlyBudget - demoReserve) * dayOfMonth / daysInMonth`.
+- Development spends from `monthlyBudget - demoReserve`, paced evenly: allowed so far = `(monthlyBudget - demoReserve) * dayOfMonth / daysInMonth`. Not built yet, see #105.
 - Over the allowance: skip that source and log `quota_paced`. For RailRadar this means the worker keeps tracking on the scrapes.
-- A scored trip spends at most about 6 RailRadar calls. About 20 a month are the reserve. Only a demo or a fallback when both scrapes fail may spend them.
+- A trip spends at most one RailRadar call per timetabled arrival, 7 on 12951. The default reserve is 20 a month. Only a demo, or a fallback when every scrape failed, may spend it.
 - Running with `--demo` spends from `demoReserve` instead, with no pacing.
 - Preflight prints what is left in each pot.
 
@@ -171,8 +172,8 @@ Free tiers are tiny, so spending is controlled in code.
 | Use | RailRadar (100) | Scrape |
 |-----|-----------------|--------|
 | Development and testing | 20 | Free |
-| One scored trip (12951), capped | about 6 | Free |
-| Reserve | about 20 | Free |
+| One scored trip (12951), capped | at most 7 | Free |
+| Reserve | 20 | Free |
 
 The rest covers fallback calls. A demo on the scrapes costs about 2 RailRadar calls: preflight 1, picker 1. A fallback adds more.
 
@@ -195,12 +196,12 @@ A 401, 403 or 451, or a captcha page, means the site has blocked us. The source 
 
 No step may need a person to do manual work.
 
-1. A failed read saves the page and opens a GitHub issue.
-2. An agent fixes the parser, with a new fixture and a test.
-3. The fix merges when the tests pass.
-4. The worker pulls the latest passing code when it starts each day.
+1. A failed read keeps the whole page in `raw_fetches` and opens a GitHub issue titled `Parser fix: <source> failed read`, labelled `worker` and `parser-fix`. The body holds the row id and the SQL to read the page, never the page itself. One open issue per title, at most 5 a day.
+2. An agent fixes the parser, with a new fixture and a test. Nothing starts that agent automatically yet, see #104.
+3. It opens the PR with the `parser-fix` label and auto-merge. The `main` ruleset requires the `ci` and `scope` checks. `scope` fails a `parser-fix` PR that touches anything outside the source parsers and fixtures.
+4. Each worker run checks out `main`, so the next run uses the fix.
 
-Meanwhile the other scrape and capped RailRadar keep the journey tracked. Blocks and thin trips open issues the same way.
+Meanwhile the other scrapes and capped RailRadar keep the journey tracked. Blocks open `Source blocked: <source>` issues, and thin trips (fewer than half the arrivals confirmed) open issues from the retention sweep. A `wrong_run` or a known "no data" page opens nothing.
 
 ## Failover during a demo
 
@@ -407,11 +408,19 @@ Known weak spots:
 - At most 1 request per minute across all scraped sites. A `robots.txt` fetch counts toward the limit.
 - Never re-fetch the same URL inside 5 min.
 - Honest `User-Agent` naming the project.
-- Respect `robots.txt`. Cache it for 24 hours per host. A 403, a 5xx or a timeout means the path is disallowed.
+- Respect `robots.txt`. Cache it for 24 hours per host. A 403, a 5xx or a timeout means the path is disallowed. An unreachable robots.txt (5xx or a timeout) is fetched again after 1 hour, so a blip doesn't switch a site off for a day. On 2 Nov Goibibo's timed out twice and Railmitra's returned 503 twice, so both stay off until they answer.
 - If a site blocks us, stop that source and follow Blocked sources above. Do not rotate IPs or spoof browsers. No headless browser.
 - The limits live in a pure gate in `packages/core`. Its state is read from `raw_fetches`, so it needs no new table.
 - Kill-switches: `SCRAPE_ENABLED`, a per-source enable list, the blocked state and a daily scrape cap.
 
 ## Where the worker runs
 
-For now the worker runs on the owner's PC. A scheduled task starts it each evening and keeps the PC awake until the train arrives. A free cloud host comes later, once a probe from that host's IP shows the scrapes are not blocked. Cloud IPs get blocked more often than home ones.
+The worker runs on GitHub Actions (`.github/workflows/worker.yml`), so it doesn't depend on the owner's PC. A probe from a GitHub runner on 2 Nov got real pages from all five sites. The repo is public, so standard runners cost nothing.
+
+- One worker is up at a time, through the `worker` concurrency group. It sleeps to exact due times in process, because cron starts can run 5 to 15 minutes late.
+- It exits cleanly at `WORKER_MAX_MINUTES=330`, under the 6-hour job limit, and sweeps on the way out. An hourly scheduled run waits queued and picks up from Supabase.
+- A keep-alive job re-enables the workflow on every trigger, so the 60-day inactivity shutoff can't stop it.
+- With `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` or `RAILRADAR_API_KEY` missing, it logs "worker skipped: secrets not set" and exits 0.
+- The trains to watch come from the `WATCH_TRAINS` repository variable, default `12951`.
+
+It can still run on any machine with `pnpm --filter @train-tracker/ingest start 12951`. Leave `WORKER_MAX_MINUTES` unset to run with no time limit.
