@@ -1,20 +1,34 @@
-// Features: one check of one journey, from the run date to the state the browser reads, without RailRadar
+// Features: one check of one journey, the scrape sources, RailRadar when the plan asks, the state the browser reads
 
 import { windowHits } from '@train-tracker/core/accuracy/score';
 import { estimate } from '@train-tracker/core/estimate';
-import { feedIsStalled } from '@train-tracker/core/schedule/health';
+import {
+  afterFailure,
+  afterSuccess,
+  callVerdict,
+  feedIsStalled,
+  sourceUsable,
+} from '@train-tracker/core/schedule/health';
+import type { SourceHealth } from '@train-tracker/core/schedule/health';
+import { normalizeEvents } from '@train-tracker/core/fusion/normalize';
+import type { NormalizeContext } from '@train-tracker/core/fusion/normalize';
 import { resolveEvents } from '@train-tracker/core/fusion/resolve';
 import { hasLeftOrigin, nextCheck } from '@train-tracker/core/schedule/next-check';
 import type { CheckReason } from '@train-tracker/core/schedule/next-check';
 import { currentRunDate } from '@train-tracker/core/schedule/run-date';
+import { parseRailRadarLive } from '@train-tracker/core/sources/railradar';
 import { istDateOf, plusDays } from '@train-tracker/core/time';
 import type {
   Estimate,
   IsoDate,
   IsoUtc,
+  RawFetch,
   ResolvedEvent,
+  SourceEvent,
+  SourceId,
   TimetableStop,
 } from '@train-tracker/core/types';
+import { fetchRailRadarLive } from '../adapters/railradar.js';
 import {
   journeyFor,
   journeyStatusOn,
@@ -25,18 +39,22 @@ import {
   stationPointsFor,
   resolvedFor,
   saveResolvedEvents,
+  saveSourceEvents,
   saveTrainState,
   sourceEventsFor,
   stateFor,
   timetableFor,
   topSpeedFor,
 } from '../db/journey-data.js';
-import { readsFor } from '../db/raw-fetches.js';
+import { insertRawFetch, rawFetchRow, readsFor } from '../db/raw-fetches.js';
+import { healthFor, saveHealth } from '../db/source-health.js';
 import { log } from '../log.js';
 import type { Config } from '../config.js';
 import { askSources } from './check-sources.js';
 
+const RAILRADAR: SourceId = 'railradar';
 const YESTERDAY = -1;
+const WRONG_RUN = 'wrong_run';
 
 export type CheckInput = {
   trainNumber: string;
@@ -79,7 +97,31 @@ async function gradeNewArrivals(
   return graded;
 }
 
-/** Why this check is due, as far as RailRadar cares: not an arrival until the train has left and a state exists */
+/** Saves RailRadar's health after a call, and says whether the call failed */
+async function saveCallHealth(
+  input: CheckInput,
+  health: SourceHealth,
+  raw: RawFetch,
+  parseErrors: number,
+  unknownHalts: number,
+): Promise<boolean> {
+  // whether this call counts against the source, from callVerdict
+  const verdict = callVerdict({
+    status: raw.status,
+    hasError: raw.error !== undefined,
+    parseErrors,
+    unknownHalts,
+  });
+  await saveHealth(
+    RAILRADAR,
+    verdict.failed ? afterFailure(health, input.now, verdict.isRateLimited) : afterSuccess(),
+    input.now,
+    input.config.db,
+  );
+  return verdict.failed;
+}
+
+/** Why this check is due */
 function checkReason(
   hasState: boolean,
   confirmed: readonly ResolvedEvent[],
@@ -95,7 +137,53 @@ function checkReason(
   return where.state === 'late' ? 'late' : 'window_open';
 }
 
-/** Runs one check of one journey: the run first, then the scrape sources in order */
+/** Asks RailRadar, storing its reply before anything can fail, and returns the events it gave */
+async function askRailRadar(
+  input: CheckInput,
+  journeyId: string,
+  context: NormalizeContext,
+): Promise<SourceEvent[]> {
+  const { trainNumber, config } = input;
+  const health = await healthFor(RAILRADAR, config.db); // how RailRadar is behaving, from healthFor
+  const usable = sourceUsable(health, input.now); // whether it may be called, from sourceUsable
+  if (!usable.usable) {
+    log('warn', usable.reason, { source: RAILRADAR, trainNumber, readyAt: usable.readyAt });
+    return [];
+  }
+
+  const raw = await fetchRailRadarLive(trainNumber, config.railRadarApiKey); // the response, from fetchRailRadarLive
+  const parsed = parseRailRadarLive(raw, ''); // the run and events it named, from parseRailRadarLive
+  const isWrongRun = parsed.journeyDate !== null && parsed.journeyDate !== context.journeyDate;
+  const stored = isWrongRun ? { ...raw, error: WRONG_RUN } : raw;
+  const rawFetchId = await insertRawFetch(rawFetchRow(stored, journeyId), config.db); // the stored row, from insertRawFetch
+
+  if (isWrongRun) {
+    log('warn', 'check_wrong_run', { source: RAILRADAR, trainNumber, named: parsed.journeyDate });
+    return [];
+  }
+  // events with the nonsense rules applied, from normalizeEvents
+  const normalized = normalizeEvents(
+    parsed.events.map((event) => ({ ...event, rawFetchId })),
+    context,
+  );
+  const unknownHalts = normalized.filter((event) => event.rejected === 'unknown_halt').length;
+  const failed = await saveCallHealth(input, health, raw, parsed.errors.length, unknownHalts); // whether the call failed, from saveCallHealth
+  if (parsed.journeyDate === null) {
+    log('warn', 'check_unreadable', {
+      source: RAILRADAR,
+      trainNumber,
+      status: raw.status,
+      error: raw.error,
+      errors: parsed.errors.join(' | '),
+      failed,
+    });
+    return [];
+  }
+  await saveSourceEvents(normalized, journeyId, config.db);
+  return normalized;
+}
+
+/** Runs one check of one journey: the run first, then the scrape sources, RailRadar only if the plan says so */
 export async function checkJourney(input: CheckInput): Promise<CheckOutcome> {
   const { trainNumber, config, now } = input;
   const [stops, topSpeedKmh, caps] = await Promise.all([
@@ -150,6 +238,11 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome> {
     check: checkReason(memory !== null, confirmedBefore, stops, before),
     windowStart: before.window?.windowStart ?? null,
   });
+  const radarEvents =
+    sources.status === 'done' && sources.railRadar?.ask === true
+      ? await askRailRadar(input, journey.id, context)
+      : [];
+
   if (sources.status === 'held' && sources.events.length === 0) {
     return { kind: 'held', readyAt: sources.readyAt ?? now };
   }
@@ -190,7 +283,8 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome> {
   await saveTrainState({ ...where, journeyId: journey.id, nextCheckAt, updatedAt: now }, config.db);
   await saveEstimate(journey.id, where, now, config.db);
 
-  const rejected = sources.events.filter((event) => event.rejected !== undefined).length;
+  const normalized = [...sources.events, ...radarEvents];
+  const rejected = normalized.filter((event) => event.rejected !== undefined).length;
   log('info', 'checked', {
     trainNumber,
     journeyDate,
