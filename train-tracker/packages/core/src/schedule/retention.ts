@@ -7,27 +7,26 @@ const ARRIVED_AFTER_HOURS = 2;
 const MIN_PER_HOUR = 60;
 const NOW_OR_LATER = 0;
 
-export type RetentionReason = 'running' | 'cooling' | 'raw_only' | 'everything';
+export type RetentionReason = 'running' | 'cooling' | 'everything';
 
 export type RetentionInput = {
   journeyDate: IsoDate;
   stops: readonly TimetableStop[];
   confirmed: readonly ResolvedEvent[];
-  hasScores: boolean;
   retentionHours: number;
   now: IsoUtc;
 };
 
 export type RetentionVerdict = {
   endedAt: IsoUtc | null;
-  deleteRaw: boolean;
+  clearRaw: boolean;
   deleteDerived: boolean;
   reason: RetentionReason;
 };
 
 const RUNNING: RetentionVerdict = {
   endedAt: null,
-  deleteRaw: false,
+  clearRaw: false,
   deleteDerived: false,
   reason: 'running',
 };
@@ -54,7 +53,7 @@ function endedAtOf(input: RetentionInput): IsoUtc | null {
   return minutesBetween(lapsed, input.now) >= NOW_OR_LATER ? lapsed : null;
 }
 
-/** What of a journey's data may be deleted now, and why */
+/** What of a journey's data may go now, and why */
 export function retentionCheck(input: RetentionInput): RetentionVerdict {
   const endedAt = endedAtOf(input); // when the journey ended, from endedAtOf
   if (endedAt === null) {
@@ -64,10 +63,8 @@ export function retentionCheck(input: RetentionInput): RetentionVerdict {
   // when the cooling window is up, from plusMinutes
   const coolUntil = plusMinutes(endedAt, input.retentionHours * MIN_PER_HOUR);
   if (minutesBetween(coolUntil, input.now) < NOW_OR_LATER) {
-    return { endedAt, deleteRaw: false, deleteDerived: false, reason: 'cooling' };
+    return { endedAt, clearRaw: false, deleteDerived: false, reason: 'cooling' };
   }
 
-  return input.hasScores
-    ? { endedAt, deleteRaw: true, deleteDerived: true, reason: 'everything' }
-    : { endedAt, deleteRaw: true, deleteDerived: false, reason: 'raw_only' };
+  return { endedAt, clearRaw: true, deleteDerived: true, reason: 'everything' };
 }

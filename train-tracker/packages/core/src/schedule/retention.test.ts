@@ -39,7 +39,6 @@ function input(over: Partial<RetentionInput> = {}): RetentionInput {
     journeyDate: JOURNEY_DATE,
     stops: STOPS,
     confirmed: [],
-    hasScores: false,
     retentionHours: RETENTION_HOURS,
     now: utc(NDLS_ARR_MIN),
     ...over,
@@ -49,7 +48,7 @@ function input(over: Partial<RetentionInput> = {}): RetentionInput {
 describe('retentionCheck, deciding a journey has ended', () => {
   it('leaves a running journey alone', () => {
     const verdict = retentionCheck(input({ now: utc(1700) }));
-    expect(verdict).toMatchObject({ reason: 'running', endedAt: null, deleteRaw: false });
+    expect(verdict).toMatchObject({ reason: 'running', endedAt: null, clearRaw: false });
   });
 
   it('ends a journey on the confirmed arrival at its last stop', () => {
@@ -79,45 +78,51 @@ describe('retentionCheck, the cooling window', () => {
     const verdict = retentionCheck(
       input({ ...ended, now: plusMinutes(arrived.at, RETENTION_HOURS * MIN_PER_HOUR - 1) }),
     );
-    expect(verdict).toMatchObject({ reason: 'cooling', deleteRaw: false, deleteDerived: false });
+    expect(verdict).toMatchObject({ reason: 'cooling', clearRaw: false, deleteDerived: false });
   });
 
-  it('lets the raw responses go once the window has passed', () => {
+  it('lets everything go once the window has passed', () => {
     const verdict = retentionCheck(
       input({ ...ended, now: plusMinutes(arrived.at, RETENTION_HOURS * MIN_PER_HOUR) }),
     );
-    expect(verdict).toMatchObject({ reason: 'raw_only', deleteRaw: true, deleteDerived: false });
+    expect(verdict).toMatchObject({ reason: 'everything', clearRaw: true, deleteDerived: true });
   });
 
   it('honours a shorter retention setting', () => {
     const verdict = retentionCheck(
       input({ ...ended, retentionHours: 1, now: plusMinutes(arrived.at, MIN_PER_HOUR) }),
     );
-    expect(verdict.deleteRaw).toBe(true);
+    expect(verdict.clearRaw).toBe(true);
   });
 });
 
-describe('retentionCheck, what scoring protects', () => {
+describe('retentionCheck, a journey that was never scored', () => {
   const arrived = at('NDLS', 'ARR', 1997);
   const due = {
     confirmed: [arrived],
     now: plusMinutes(arrived.at, RETENTION_HOURS * MIN_PER_HOUR),
   };
 
-  it('holds the confirmed events back until the journey has been scored', () => {
-    const verdict = retentionCheck(input({ ...due, hasScores: false }));
-    expect(verdict).toMatchObject({ reason: 'raw_only', deleteRaw: true, deleteDerived: false });
+  it('is cleaned like any other, so its data does not stay forever', () => {
+    expect(retentionCheck(input(due))).toMatchObject({
+      reason: 'everything',
+      clearRaw: true,
+      deleteDerived: true,
+    });
   });
 
-  it('lets everything go once the scores are written', () => {
-    const verdict = retentionCheck(input({ ...due, hasScores: true }));
-    expect(verdict).toMatchObject({ reason: 'everything', deleteRaw: true, deleteDerived: true });
+  it('is cleaned when it has no confirmed events at all', () => {
+    const lapsed = utc(NDLS_ARR_MIN + 2 * MIN_PER_HOUR + RETENTION_HOURS * MIN_PER_HOUR);
+    expect(retentionCheck(input({ now: lapsed }))).toMatchObject({
+      clearRaw: true,
+      deleteDerived: true,
+    });
   });
 
-  it('never deletes the derived data without also having let the raw go', () => {
-    for (const hasScores of [false, true]) {
-      const verdict = retentionCheck(input({ ...due, hasScores }));
-      expect(verdict.deleteDerived && !verdict.deleteRaw).toBe(false);
+  it('never clears the derived data without also clearing the raw', () => {
+    for (const now of [utc(1700), arrived.at, due.now]) {
+      const verdict = retentionCheck(input({ confirmed: [arrived], now }));
+      expect(verdict.deleteDerived && !verdict.clearRaw).toBe(false);
     }
   });
 });
