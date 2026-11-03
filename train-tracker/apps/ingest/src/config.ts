@@ -45,6 +45,7 @@ const Env = z.object({
   SCRAPE_ENABLED: z.enum(['true', 'false']).optional(),
   SCRAPE_SOURCES: SourceList.optional(),
   SCRAPE_DAILY_CAP: z.coerce.number().int().positive().optional(),
+  WORKER_MAX_MINUTES: z.coerce.number().int().positive().optional(),
 });
 
 export type Quota = { monthlyBudget: number; demoReserve: number };
@@ -63,6 +64,7 @@ export type Config = {
   retentionHours: number;
   intervals: CheckIntervals;
   scrape: ScrapeConfig;
+  workerMaxMin: number | null;
 };
 
 /** The config for this run, validated once so nothing else reads the environment */
@@ -96,5 +98,6 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       dailyCap: data.SCRAPE_DAILY_CAP ?? DEFAULT_DAILY_CAP,
       slugs: TRAIN_SLUGS,
     },
+    workerMaxMin: data.WORKER_MAX_MINUTES ?? null,
   };
 }
