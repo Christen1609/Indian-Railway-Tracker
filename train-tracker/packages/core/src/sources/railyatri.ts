@@ -1,16 +1,17 @@
 // Features: RailYatri page schema, the RailYatri live parser, the part of a page worth keeping
 
 import { z } from 'zod';
-import { istWallToUtc, plusDays } from '../time.js';
+import { istWallToUtc, plusDays, toUtc } from '../time.js';
 import { NEXT_DATA, nextDataPart } from './goibibo.js';
 import { canonicalStationCode } from './stations.js';
 import type { ParseResult } from './railradar.js';
-import type { EventType, RawFetch, SourceEvent } from '../types.js';
+import type { EventType, IsoUtc, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'railyatri_scrape';
 const OK = 200;
 const FIRST_STOPPAGE = 1;
 const NEXT_DAY = 1;
+const UPDATED = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}):\d{2} ([+-]\d{2})(\d{2})$/;
 
 const Clock = z.string().regex(/^\d{2}:\d{2}$/);
 
@@ -31,10 +32,19 @@ const Page = z.object({
         source: z.string().min(1),
         at_src: z.boolean(),
         previous_stations: z.array(Passed).optional(),
+        update_time: z.string().optional(),
       }),
     }),
   }),
 });
+
+/** When the page says it was updated, in UTC, or undefined when it says nothing we can read */
+function updatedAtOf(text: string | undefined): IsoUtc | undefined {
+  const parts = UPDATED.exec(text ?? '');
+  return parts === null
+    ? undefined
+    : (toUtc(`${parts[1]}T${parts[2]}:00${parts[3]}:${parts[4]}`) ?? undefined);
+}
 
 /** Events from one RailYatri live page, with every problem found */
 export function parseRailYatriLive(raw: RawFetch, rawFetchId: string): ParseResult {
@@ -109,7 +119,13 @@ export function parseRailYatriLive(raw: RawFetch, rawFetchId: string): ParseResu
     }
   }
 
-  return { events: errors.length > 0 ? [] : events, errors, journeyDate };
+  const updatedAt = updatedAtOf(lts.update_time); // when the page was updated, from updatedAtOf
+  return {
+    events: errors.length > 0 ? [] : events,
+    errors,
+    journeyDate,
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  };
 }
 
 /** A RailYatri page cut down to ltsData, or null when it holds none */

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { goibiboTrainData, parseGoibiboLive } from './goibibo.js';
+import { feedIsStalled } from '../schedule/health.js';
 import type { RawFetch } from '../types.js';
 
 const FIXTURES = join(import.meta.dirname, '../../../../fixtures/goibibo');
@@ -173,5 +174,31 @@ describe('goibiboTrainData', () => {
     expect(
       goibiboTrainData('<script id="__NEXT_DATA__" type="application/json">{oops</script>'),
     ).toBeNull();
+  });
+});
+
+describe('parseGoibiboLive, when the page was updated', () => {
+  it('reads LastUpdated as IST and gives it as UTC', () => {
+    expect(running.updatedAt).toBe('2026-10-29T23:33:00.000Z');
+    expect(stale.updatedAt).toBe('2026-10-31T18:35:00.000Z');
+  });
+
+  it('gives none for a page that says No data', () => {
+    expect(parseGoibiboLive(fetched(NO_DATA), RAW_ID).updatedAt).toBeUndefined();
+  });
+
+  it('still reads the events when LastUpdated is not a time it knows, and gives none', () => {
+    const odd = parseGoibiboLive(
+      fetched(RUNNING.replace('30-10-2026 05:03:00', 'yesterday')),
+      RAW_ID,
+    );
+    expect(odd.events).toEqual(running.events);
+    expect(odd.updatedAt).toBeUndefined();
+  });
+
+  it('reads the real stale 12017 page as a stalled feed, and the running 12951 page as live', () => {
+    const fetchedStaleAt = '2026-11-02T01:20:00.000Z';
+    expect(feedIsStalled([stale.updatedAt], fetchedStaleAt)).toBe(true);
+    expect(feedIsStalled([running.updatedAt], FETCHED_AT)).toBe(false);
   });
 });

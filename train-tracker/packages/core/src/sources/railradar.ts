@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { istDateOf, toUtc } from '../time.js';
 import { canonicalStationCode } from './stations.js';
-import type { EventType, IsoDate, RawFetch, SourceEvent } from '../types.js';
+import type { EventType, IsoDate, IsoUtc, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'railradar';
 const OBSERVED = 'observed';
@@ -34,6 +34,7 @@ export type ParseResult = {
   errors: string[];
   journeyDate: IsoDate | null;
   isUnavailable?: boolean;
+  updatedAt?: IsoUtc;
 };
 
 /** Events a stop reports, as type and timestamp pairs, before any are confirmed */

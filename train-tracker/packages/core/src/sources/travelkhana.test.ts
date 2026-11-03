@@ -108,7 +108,12 @@ describe('parseTravelkhanaLive on a run that is hours late', () => {
 
   it('emits nothing for the run listed above it that has not started', () => {
     const next = parseTravelkhanaLive(fetched(LATE_RUN), RAW_ID, '2026-11-02');
-    expect(next).toEqual({ events: [], errors: [], journeyDate: '2026-11-02' });
+    expect(next).toEqual({
+      events: [],
+      errors: [],
+      journeyDate: '2026-11-02',
+      updatedAt: '2026-11-02T03:22:00.000Z',
+    });
   });
 });
 
@@ -150,5 +155,17 @@ describe('travelkhanaTrainData', () => {
 
   it('returns null for a page with no run tables', () => {
     expect(travelkhanaTrainData('<html>hello</html>')).toBeNull();
+  });
+});
+
+describe('parseTravelkhanaLive, when the page was updated', () => {
+  it('reads the Last Updated of the run asked for as IST and gives it as UTC', () => {
+    expect(running.updatedAt).toBe('2026-10-29T23:24:00.000Z');
+    const late = parseTravelkhanaLive(fetched(LATE_RUN), RAW_ID, '2026-11-01');
+    expect(late.updatedAt).toBe('2026-11-02T03:22:00.000Z');
+  });
+
+  it('gives none when the run is not on the page', () => {
+    expect(parseTravelkhanaLive(fetched(PAGE), RAW_ID, '2026-10-30').updatedAt).toBeUndefined();
   });
 });

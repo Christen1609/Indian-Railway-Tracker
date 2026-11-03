@@ -147,3 +147,23 @@ describe('railyatriTrainData', () => {
     expect(railyatriTrainData('<html>hello</html>')).toBeNull();
   });
 });
+
+describe('parseRailYatriLive, when the page was updated', () => {
+  it('reads update_time with its offset and gives it as UTC', () => {
+    expect(midRun.updatedAt).toBe('2026-11-02T03:32:00.000Z');
+    expect(justLeft.updatedAt).toBe('2026-11-02T01:18:00.000Z');
+  });
+
+  it('gives none for a page that carries no update_time', () => {
+    expect(notStarted.updatedAt).toBeUndefined();
+  });
+
+  it('still reads the events when update_time is not a time it knows, and gives none', () => {
+    const odd = parseRailYatriLive(
+      fetched(MID_RUN.replace('2026-11-02 09:02:00 +0530', 'soon')),
+      RAW_ID,
+    );
+    expect(odd.events).toEqual(midRun.events);
+    expect(odd.updatedAt).toBeUndefined();
+  });
+});

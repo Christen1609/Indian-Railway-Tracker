@@ -4,12 +4,14 @@ import { z } from 'zod';
 import { dayMonthToIso, istWallToUtc, plusDays } from '../time.js';
 import { canonicalStationCode } from './stations.js';
 import type { ParseResult } from './railradar.js';
-import type { EventType, IsoDate, RawFetch, SourceEvent } from '../types.js';
+import type { EventType, IsoDate, IsoUtc, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'travelkhana_scrape';
 const OK = 200;
 const BLOCK_START = "<span class='dept-head'>Current Station";
 const START_DATE = /Start Date\s*<\/span>\s*<span>(\d{1,2}) ([A-Za-z]{3}) (\d{4})<\/span>/;
+const UPDATED =
+  /Last Updated\s*<\/span>\s*<span>(\d{2}:\d{2}) (\d{1,2})-([A-Za-z]{3})-(\d{4})<\/span>/;
 const TRAIN_NUMBER = /track-train\/(\d+)-/;
 const CANONICAL = /<link rel="canonical" href="[^"]*track-train\/\d+-[^"]*"\s*\/?>/;
 const TABLE_END = '</table>';
@@ -53,6 +55,16 @@ function runBlock(html: string, journeyDate: IsoDate): string | null {
       );
     });
   return found ?? null;
+}
+
+/** When the page says the run was updated, in UTC, or undefined when it says nothing we can read */
+function updatedAtOf(block: string): IsoUtc | undefined {
+  const parts = UPDATED.exec(block);
+  const date =
+    parts === null ? null : dayMonthToIso(parts[2] ?? '', parts[3] ?? '', Number(parts[4]));
+  return date === null || parts === null
+    ? undefined
+    : (istWallToUtc(date, parts[1] ?? '') ?? undefined);
 }
 
 /** Events from the run of one date on a Travelkhana page, which lists the last 8 runs */
@@ -139,7 +151,13 @@ export function parseTravelkhanaLive(
     }
   }
 
-  return { events: errors.length > 0 ? [] : events, errors, journeyDate };
+  const updatedAt = updatedAtOf(block); // when the run was updated, from updatedAtOf
+  return {
+    events: errors.length > 0 ? [] : events,
+    errors,
+    journeyDate,
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  };
 }
 
 /** A Travelkhana page cut down to its address and the tables of its runs, or null when it has none */
