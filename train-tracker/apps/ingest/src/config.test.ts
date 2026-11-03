@@ -99,3 +99,20 @@ describe('readConfig, the worker time limit', () => {
     expect(() => readConfig({ ...ENV, WORKER_MAX_MINUTES: minutes })).toThrow(/WORKER_MAX_MINUTES/);
   });
 });
+
+describe('readConfig, the GitHub issues switch', () => {
+  it('has no issues config without a token and a repository', () => {
+    expect(readConfig(ENV).issues).toBeNull();
+    expect(readConfig({ ...ENV, GH_TOKEN: 'token' }).issues).toBeNull();
+    expect(readConfig({ ...ENV, GITHUB_REPOSITORY: 'owner/repo' }).issues).toBeNull();
+  });
+
+  it('takes both', () => {
+    const env = { ...ENV, GH_TOKEN: 'token', GITHUB_REPOSITORY: 'owner/repo' };
+    expect(readConfig(env).issues).toEqual({ token: 'token', repository: 'owner/repo' });
+  });
+
+  it('refuses a repository that is not owner/name', () => {
+    expect(() => readConfig({ ...ENV, GITHUB_REPOSITORY: '../orgs' })).toThrow(/GITHUB_REPOSITORY/);
+  });
+});

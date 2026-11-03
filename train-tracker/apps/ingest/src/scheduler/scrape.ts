@@ -1,4 +1,4 @@
-// Features: what stands in front of a scrape source's page, reading one source for a journey, settling the source's health afterwards
+// Features: what stands in front of a scrape source's page, reading one source for a journey, settling the source's health and issues afterwards
 
 import {
   afterFailure,
@@ -26,6 +26,8 @@ import {
 } from '@train-tracker/core/sources/travelkhana';
 import { istDateOf, plusMinutes } from '@train-tracker/core/time';
 import type { IsoDate, IsoUtc, RawFetch } from '@train-tracker/core/types';
+import { issueFor } from '@train-tracker/core/schedule/issue';
+import { openIssue } from '../adapters/issues.js';
 import { fetchPage } from '../adapters/scrape.js';
 import { scrapeUrl } from '../adapters/scrape-sites.js';
 import type { ScrapeSource, SkipReason } from '../adapters/scrape-sites.js';
@@ -248,7 +250,7 @@ export async function readScrape(input: ScrapeInput): Promise<ScrapeResult> {
   };
 }
 
-/** Records how a read went for the source, once its station codes are checked: health, then the block */
+/** Records how a read went for the source, once its station codes are checked: health, the block, then any issue */
 export async function settleScrape(
   read: ScrapeRead,
   unknownHalts: number,
@@ -270,6 +272,20 @@ export async function settleScrape(
     await saveBlock(read.source, afterBlock(read.block, now), now, config.db);
   } else if (outcome === 'ok' && read.block.blockedAt !== null) {
     await saveBlock(read.source, NOT_BLOCKED, now, config.db);
+  }
+  // the issue this read calls for, from issueFor
+  const draft = issueFor({
+    outcome,
+    source: read.source,
+    url: read.raw.url,
+    status: read.raw.status,
+    hasError: read.raw.error !== undefined,
+    rawFetchId: read.rawFetchId,
+    parseErrors: read.parsed.errors,
+    unknownHalts,
+  });
+  if (draft !== null) {
+    await openIssue(draft, config.issues, now);
   }
   return outcome;
 }

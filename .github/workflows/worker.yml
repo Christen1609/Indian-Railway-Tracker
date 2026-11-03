@@ -12,6 +12,9 @@ jobs:
   watch:
     runs-on: ubuntu-latest
     timeout-minutes: 345
+    permissions:
+      contents: read
+      issues: write
     concurrency:
       group: worker
       cancel-in-progress: false
@@ -23,6 +26,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       RAILRADAR_API_KEY: ${{ secrets.RAILRADAR_API_KEY }}
       WATCH_TRAINS: ${{ vars.WATCH_TRAINS || '12951' }}
+      GH_TOKEN: ${{ github.token }}
       WORKER_MAX_MINUTES: "330"
     steps:
       - name: Check secrets
@@ -55,6 +59,11 @@ jobs:
 
       - if: steps.secrets.outputs.ready == 'true'
         run: pnpm install --frozen-lockfile
+
+      - if: steps.secrets.outputs.ready == 'true'
+        run: |
+          gh label create worker --force --description "Opened by the worker"
+          gh label create parser-fix --force --description "A parser needs fixing"
 
       - if: steps.secrets.outputs.ready == 'true'
         run: pnpm --filter @train-tracker/ingest exec tsc --build

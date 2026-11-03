@@ -8,6 +8,7 @@ import type { SourceId } from '@train-tracker/core/types';
 import type { TrainSlugs } from './adapters/scrape-sites.js';
 import type { DbConfig } from './db/rest.js';
 
+const REPOSITORY = /^[\w-][\w.-]*\/[\w-][\w.-]*$/;
 const MINUTE_LIST = /^[1-9]\d*(,[1-9]\d*)*$/;
 const RAILRADAR_BUDGET = 100;
 const RETENTION_HOURS = 24;
@@ -46,6 +47,8 @@ const Env = z.object({
   SCRAPE_SOURCES: SourceList.optional(),
   SCRAPE_DAILY_CAP: z.coerce.number().int().positive().optional(),
   WORKER_MAX_MINUTES: z.coerce.number().int().positive().optional(),
+  GH_TOKEN: z.string().min(1).optional(),
+  GITHUB_REPOSITORY: z.string().regex(REPOSITORY).optional(),
 });
 
 export type Quota = { monthlyBudget: number; demoReserve: number };
@@ -57,6 +60,8 @@ export type ScrapeConfig = {
   slugs: Readonly<Record<string, TrainSlugs>>;
 };
 
+export type IssuesConfig = { token: string; repository: string };
+
 export type Config = {
   railRadarApiKey: string;
   db: DbConfig;
@@ -65,6 +70,7 @@ export type Config = {
   intervals: CheckIntervals;
   scrape: ScrapeConfig;
   workerMaxMin: number | null;
+  issues: IssuesConfig | null;
 };
 
 /** The config for this run, validated once so nothing else reads the environment */
@@ -99,5 +105,9 @@ export function readConfig(env: Record<string, string | undefined>): Config {
       slugs: TRAIN_SLUGS,
     },
     workerMaxMin: data.WORKER_MAX_MINUTES ?? null,
+    issues:
+      data.GH_TOKEN === undefined || data.GITHUB_REPOSITORY === undefined
+        ? null
+        : { token: data.GH_TOKEN, repository: data.GITHUB_REPOSITORY },
   };
 }

@@ -5,6 +5,7 @@ import { HEALTHY, afterFailure } from '@train-tracker/core/schedule/health';
 import { NOT_BLOCKED, afterBlock } from '@train-tracker/core/schedule/scrape-gate';
 import { parseConfirmTktLive } from '@train-tracker/core/sources/confirmtkt';
 import type { RawFetch } from '@train-tracker/core/types';
+import { openIssue } from '../adapters/issues.js';
 import { fetchPage } from '../adapters/scrape.js';
 import type { Config } from '../config.js';
 import { insertRawFetch, robotsFor, scrapeStateFor } from '../db/raw-fetches.js';
@@ -13,6 +14,7 @@ import { classifyRead, prepareScrape, readScrape, settleScrape } from './scrape.
 import type { ScrapeInput, ScrapeRead } from './scrape.js';
 
 vi.mock('../adapters/scrape.js');
+vi.mock('../adapters/issues.js');
 vi.mock('@train-tracker/core/sources/confirmtkt', async (original) => {
   const real = await original<typeof import('@train-tracker/core/sources/confirmtkt')>();
   return { ...real, parseConfirmTktLive: vi.fn(real.parseConfirmTktLive) };
@@ -52,6 +54,7 @@ const CONFIG = {
     dailyCap: 300,
     slugs: { '12951': { travelkhana: 'Mumbai-Central', railmitra: 'mumbai-rajdhani' } },
   },
+  issues: { token: 'token', repository: 'owner/repo' },
 } as unknown as Config;
 
 const INPUT: ScrapeInput = {
@@ -412,6 +415,51 @@ describe('settleScrape, health and the block', () => {
     const read = await readOf(replied('<html>changed</html>'));
     expect(await settleScrape(read, 0, CONFIG, NOW)).toBe('failed');
     expect(vi.mocked(saveHealth).mock.calls[0]?.[1]).toMatchObject({ failures: 1 });
+  });
+});
+
+describe('settleScrape, issues', () => {
+  /** The issue draft handed to openIssue, if any */
+  function drafted(): { title: string; body: string } | undefined {
+    return vi.mocked(openIssue).mock.calls[0]?.[0];
+  }
+
+  it('opens a parser-fix issue, with the stored row id, for a page it could not read', async () => {
+    const read = await readOf(replied('<html>changed</html>'));
+    await settleScrape(read, 0, CONFIG, NOW);
+    expect(drafted()?.title).toBe('Parser fix: confirmtkt_scrape failed read');
+    expect(drafted()?.body).toContain('raw_fetches id: raw-1');
+    expect(drafted()?.body).not.toContain('<html>changed</html>');
+    expect(vi.mocked(openIssue).mock.calls[0]?.[1]).toBe(CONFIG.issues);
+  });
+
+  it('opens a parser-fix issue for a read with an unknown station', async () => {
+    const read = await readOf(replied(CONFIRMTKT_PAGE));
+    await settleScrape(read, 1, CONFIG, NOW);
+    expect(drafted()?.body).toContain('Unknown station codes: 1');
+  });
+
+  it('opens a block issue for a 403', async () => {
+    const read = await readOf(replied('Forbidden', { status: 403 }));
+    await settleScrape(read, 0, CONFIG, NOW);
+    expect(drafted()?.title).toBe('Source blocked: confirmtkt_scrape');
+  });
+
+  it('opens nothing for a good read, a page for another run, or a site with no data', async () => {
+    const good = await readOf(replied(CONFIRMTKT_PAGE));
+    await settleScrape(good, 0, CONFIG, NOW);
+    const other = await readOf(replied(CONFIRMTKT_PAGE), { ...INPUT, journeyDate: '2026-10-28' });
+    await settleScrape(other, 0, CONFIG, NOW);
+    const goibibo = { ...INPUT, source: 'goibibo_scrape' } as const;
+    const none = await readOf(replied(NO_DATA_PAGE, { source: 'goibibo_scrape' }), goibibo);
+    await settleScrape(none, 0, CONFIG, NOW);
+    expect(openIssue).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing for a request that never completed', async () => {
+    const read = await readOf(replied('', { status: 0, error: 'timeout' }));
+    await settleScrape(read, 0, CONFIG, NOW);
+    expect(openIssue).not.toHaveBeenCalled();
   });
 });
 
