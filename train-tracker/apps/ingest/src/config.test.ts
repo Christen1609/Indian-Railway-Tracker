@@ -85,3 +85,17 @@ describe('readConfig, the RailRadar reserve', () => {
     );
   });
 });
+
+describe('readConfig, the worker time limit', () => {
+  it('has no limit when WORKER_MAX_MINUTES is not set', () => {
+    expect(readConfig(ENV).workerMaxMin).toBeNull();
+  });
+
+  it('takes WORKER_MAX_MINUTES', () => {
+    expect(readConfig({ ...ENV, WORKER_MAX_MINUTES: '330' }).workerMaxMin).toBe(330);
+  });
+
+  it.each(['0', '-5', 'soon'])('refuses %s as a time limit', (minutes) => {
+    expect(() => readConfig({ ...ENV, WORKER_MAX_MINUTES: minutes })).toThrow(/WORKER_MAX_MINUTES/);
+  });
+});

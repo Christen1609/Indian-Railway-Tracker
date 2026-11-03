@@ -1,4 +1,4 @@
-// Features: when a train is next worth a look, one pass over the list, holding back a held or failing train
+// Features: when a train is next worth a look, one pass over the list, holding back a held or failing train, the wait between passes
 
 import { backoffMin } from '@train-tracker/core/schedule/health';
 import { nextJourneyCheck } from '@train-tracker/core/schedule/next-check';
@@ -8,6 +8,9 @@ import type { Config } from '../config.js';
 import { latestJourneyFor, stateFor, timetableFor } from '../db/journey-data.js';
 import { log } from '../log.js';
 import { checkJourney } from './check-journey.js';
+
+const WAIT_FLOOR_MS = 20_000;
+const WAIT_CEILING_MS = 300_000;
 
 type Hold = { failures: number; until: IsoUtc };
 
@@ -95,4 +98,14 @@ export async function watchRound(watching: readonly string[], run: Run): Promise
   }
 
   return due.filter((one): one is IsoUtc => one !== null).sort()[0] ?? null;
+}
+
+/** How long to wait before the next pass, or null once the run's time is up */
+export function waitBeforeNext(soonest: IsoUtc, now: IsoUtc, endsAt: IsoUtc | null): number | null {
+  const left = endsAt === null ? Infinity : Date.parse(endsAt) - Date.parse(now);
+  if (left <= 0) {
+    return null;
+  }
+  const gap = Date.parse(soonest) - Date.parse(now);
+  return Math.min(left, WAIT_CEILING_MS, Math.max(WAIT_FLOOR_MS, gap));
 }

@@ -4,7 +4,7 @@ import type { Config } from '../config.js';
 import { latestJourneyFor, stateFor, timetableFor } from '../db/journey-data.js';
 import { checkJourney } from './check-journey.js';
 import type { CheckOutcome } from './check-journey.js';
-import { watchRound } from './watch.js';
+import { waitBeforeNext, watchRound } from './watch.js';
 import type { Run } from './watch.js';
 
 vi.mock('../db/journey-data.js');
@@ -157,5 +157,29 @@ describe('watchRound', () => {
       '2026-10-28T06:01:00.000Z',
     );
     expect(checkJourney).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('waitBeforeNext', () => {
+  const MINUTE = 60_000;
+  const at = (minutes: number): string =>
+    new Date(Date.parse(NOW) + minutes * MINUTE).toISOString();
+
+  it('waits until the train is due', () => {
+    expect(waitBeforeNext(at(2), NOW, null)).toBe(2 * MINUTE);
+  });
+
+  it('waits at least 20 seconds and at most 5 minutes', () => {
+    expect(waitBeforeNext(NOW, NOW, null)).toBe(20_000);
+    expect(waitBeforeNext(at(120), NOW, null)).toBe(5 * MINUTE);
+  });
+
+  it('never waits past the end of the run', () => {
+    expect(waitBeforeNext(at(120), NOW, at(1))).toBe(MINUTE);
+  });
+
+  it('says the run is over once its time is up', () => {
+    expect(waitBeforeNext(at(2), at(10), at(10))).toBeNull();
+    expect(waitBeforeNext(at(2), at(11), at(10))).toBeNull();
   });
 });
