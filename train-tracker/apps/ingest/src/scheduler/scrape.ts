@@ -15,12 +15,15 @@ import {
   scrapeGate,
 } from '@train-tracker/core/schedule/scrape-gate';
 import type { BlockState, GateReason } from '@train-tracker/core/schedule/scrape-gate';
-import { parseConfirmTktLive } from '@train-tracker/core/sources/confirmtkt';
-import { parseGoibiboLive } from '@train-tracker/core/sources/goibibo';
-import { parseRailYatriLive } from '@train-tracker/core/sources/railyatri';
-import { parseRailmitraLive } from '@train-tracker/core/sources/railmitra';
+import { confirmtktTrainData, parseConfirmTktLive } from '@train-tracker/core/sources/confirmtkt';
+import { goibiboTrainData, parseGoibiboLive } from '@train-tracker/core/sources/goibibo';
+import { parseRailYatriLive, railyatriTrainData } from '@train-tracker/core/sources/railyatri';
+import { parseRailmitraLive, railmitraTrainData } from '@train-tracker/core/sources/railmitra';
 import type { ParseResult } from '@train-tracker/core/sources/railradar';
-import { parseTravelkhanaLive } from '@train-tracker/core/sources/travelkhana';
+import {
+  parseTravelkhanaLive,
+  travelkhanaTrainData,
+} from '@train-tracker/core/sources/travelkhana';
 import { istDateOf, plusMinutes } from '@train-tracker/core/time';
 import type { IsoDate, IsoUtc, RawFetch } from '@train-tracker/core/types';
 import { fetchPage } from '../adapters/scrape.js';
@@ -186,10 +189,34 @@ export function classifyRead(
   return { outcome: verdict.failed ? 'failed' : 'ok', call };
 }
 
-/** The reply as it is stored, marked as not a success unless it was a usable read */
-function storedAs(raw: RawFetch, outcome: ReadOutcome, parseErrors: number): RawFetch {
+/** The part of a source's page worth keeping, or null when it has none */
+function trainDataOf(source: ScrapeSource, body: string): string | null {
+  switch (source) {
+    case 'goibibo_scrape':
+      return goibiboTrainData(body);
+    case 'confirmtkt_scrape':
+      return confirmtktTrainData(body);
+    case 'travelkhana_scrape':
+      return travelkhanaTrainData(body);
+    case 'railyatri_scrape':
+      return railyatriTrainData(body);
+    case 'railmitra_scrape':
+      return railmitraTrainData(body);
+  }
+}
+
+/** The reply as it is stored: marked as not a success unless usable, cut to its train data unless the read failed */
+function storedAs(
+  source: ScrapeSource,
+  raw: RawFetch,
+  outcome: ReadOutcome,
+  parseErrors: number,
+): RawFetch {
   const error = raw.error ?? ROW_ERROR[outcome] ?? (parseErrors > 0 ? 'parse_error' : undefined);
-  return error === undefined ? raw : { ...raw, error };
+  const hasReadFailed = raw.error !== undefined || raw.status !== OK || parseErrors > 0;
+  const kept = hasReadFailed ? null : trainDataOf(source, raw.body); // the part worth keeping, from trainDataOf
+  const stored = kept === null ? raw : { ...raw, body: kept };
+  return error === undefined ? stored : { ...stored, error };
 }
 
 /** Fetches one scrape source for a journey and stores the reply, leaving health for settleScrape */
@@ -204,7 +231,7 @@ export async function readScrape(input: ScrapeInput): Promise<ScrapeResult> {
   const parsed = parseScrape(source, raw, '', journeyDate); // events and the run, from parseScrape
   const { outcome, call } = classifyRead(raw, parsed, journeyDate); // what the reply was, from classifyRead
   const rawFetchId = await insertRawFetch(
-    rawFetchRow(storedAs(raw, outcome, parsed.errors.length), input.journeyId),
+    rawFetchRow(storedAs(source, raw, outcome, parsed.errors.length), input.journeyId),
     config.db,
   );
 

@@ -1,4 +1,4 @@
-// Features: Railmitra row schema, reading the page, the Railmitra live parser
+// Features: Railmitra row schema, reading the page, the Railmitra live parser, the part of a page worth keeping
 
 import { z } from 'zod';
 import { dayMonthToIso, istWallToUtc } from '../time.js';
@@ -10,6 +10,9 @@ const SOURCE = 'railmitra_scrape';
 const OK = 200;
 const ROW_START = '<div class="well well-sm">';
 const TRAIN_NUMBER = /<h1><span>(\d+)<\/span> Train Running Status/;
+const SELECTED_OPTION = /<option value=\w+ selected=selected>[^<]*<\/option>/;
+const CARD_END = '<div class="card cardResult small">';
+const HEADING = '<h1><span>';
 const SELECTED_DATE = /selected=selected>[^<]*?(\d{1,2})-([A-Za-z]{3})-(\d{4})</;
 const HEADER = /<div class=col-12>(Train [A-Za-z ]+?) <strong>/;
 const DEPARTED_HEADER = 'Train Departed from';
@@ -135,4 +138,16 @@ export function parseRailmitraLive(raw: RawFetch, rawFetchId: string): ParseResu
   }
 
   return { events: errors.length > 0 ? [] : events, errors, journeyDate };
+}
+
+/** A Railmitra page cut down to its date, heading and station rows, or null when it has none */
+export function railmitraTrainData(body: string): string | null {
+  const option = SELECTED_OPTION.exec(body)?.[0];
+  const start = body.indexOf(HEADING);
+  const lastRow = body.lastIndexOf(ROW_START);
+  const end = body.indexOf(CARD_END, lastRow);
+  if (option === undefined || start < 0 || lastRow < start || end < 0) {
+    return null;
+  }
+  return `${option}\n${body.slice(start, end)}`;
 }

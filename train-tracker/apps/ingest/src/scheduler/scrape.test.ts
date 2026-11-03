@@ -35,6 +35,10 @@ const NO_DATA_PAGE = readFileSync(
   join(FIXTURES, 'goibibo/12017-2026-11-02T0905IST-no-data-excerpt.html'),
   'utf8',
 );
+const RAILMITRA_OOPS = readFileSync(
+  join(FIXTURES, 'railmitra/12951-2026-11-02T0903IST-service-error.html'),
+  'utf8',
+);
 const NOW = '2026-10-30T04:40:00.000Z';
 const RUN = '2026-10-29';
 const ALLOW_ALL = { status: 200, body: 'User-agent: *\nDisallow:' };
@@ -267,6 +271,35 @@ describe('readScrape, a usable page', () => {
     vi.mocked(robotsFor).mockResolvedValue(null);
     vi.mocked(fetchPage).mockResolvedValue(replied('User-agent: *\nDisallow:'));
     expect(await readScrape(INPUT)).toMatchObject({ kind: 'skipped', reason: 'robots_fetched' });
+  });
+});
+
+describe('readScrape, what is stored of a page', () => {
+  it('keeps only the train data of a usable read, which the parser still reads the same', async () => {
+    const read = await readOf(replied(CONFIRMTKT_PAGE));
+    const body = storedRow().body as string;
+    expect(body.length).toBeLessThan(CONFIRMTKT_PAGE.length / 2);
+    expect(parseConfirmTktLive(replied(body), 'raw-1')).toEqual(read.parsed);
+  });
+
+  it('keeps the whole page of a read that failed, so a parser fix can be tested against it', async () => {
+    await readOf(replied('<html>changed</html>'));
+    expect(storedRow().body).toBe('<html>changed</html>');
+  });
+
+  it('keeps the whole page of a block', async () => {
+    await readOf(replied('Forbidden', { status: 403 }));
+    expect(storedRow().body).toBe('Forbidden');
+  });
+
+  it('keeps the whole page when it holds no train data to cut to', async () => {
+    const config = {
+      ...CONFIG,
+      scrape: { ...CONFIG.scrape, sources: ['railmitra_scrape'] },
+    } as Config;
+    const input = { ...INPUT, source: 'railmitra_scrape', config } as const;
+    await readOf(replied(RAILMITRA_OOPS, { source: 'railmitra_scrape' }), input);
+    expect(storedRow().body).toBe(RAILMITRA_OOPS);
   });
 });
 

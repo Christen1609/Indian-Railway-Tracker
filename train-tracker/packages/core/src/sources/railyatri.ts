@@ -1,8 +1,8 @@
-// Features: RailYatri page schema, the RailYatri live parser
+// Features: RailYatri page schema, the RailYatri live parser, the part of a page worth keeping
 
 import { z } from 'zod';
 import { istWallToUtc, plusDays } from '../time.js';
-import { NEXT_DATA } from './goibibo.js';
+import { NEXT_DATA, nextDataPart } from './goibibo.js';
 import { canonicalStationCode } from './stations.js';
 import type { ParseResult } from './railradar.js';
 import type { EventType, RawFetch, SourceEvent } from '../types.js';
@@ -110,4 +110,9 @@ export function parseRailYatriLive(raw: RawFetch, rawFetchId: string): ParseResu
   }
 
   return { events: errors.length > 0 ? [] : events, errors, journeyDate };
+}
+
+/** A RailYatri page cut down to ltsData, or null when it holds none */
+export function railyatriTrainData(body: string): string | null {
+  return nextDataPart(body, ['props', 'pageProps', 'ltsData']);
 }

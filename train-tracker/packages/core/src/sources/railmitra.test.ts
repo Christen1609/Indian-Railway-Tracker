@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseGoibiboLive } from './goibibo.js';
-import { parseRailmitraLive } from './railmitra.js';
+import { parseRailmitraLive, railmitraTrainData } from './railmitra.js';
 import type { RawFetch, SourceEvent } from '../types.js';
 
 const FIXTURES = join(import.meta.dirname, '../../../../fixtures');
@@ -130,5 +130,17 @@ describe('parseRailmitraLive on a bad response', () => {
 
   it('gives no run date when it cannot read one', () => {
     expect(parseRailmitraLive(fetched('<html></html>'), RAW_ID).journeyDate).toBeNull();
+  });
+});
+
+describe('railmitraTrainData', () => {
+  it('keeps the heading, date and station rows, which the parser reads exactly as before', () => {
+    const kept = railmitraTrainData(PAGE);
+    expect(kept?.length).toBeLessThan(PAGE.length / 2);
+    expect(parseRailmitraLive(fetched(kept ?? ''), RAW_ID)).toEqual(running);
+  });
+
+  it('returns null for the Oops page, which has no rows, so that it is kept whole', () => {
+    expect(railmitraTrainData(SERVICE_ERROR)).toBeNull();
   });
 });

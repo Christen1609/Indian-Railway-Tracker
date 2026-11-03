@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseGoibiboLive } from './goibibo.js';
+import { goibiboTrainData, parseGoibiboLive } from './goibibo.js';
 import type { RawFetch } from '../types.js';
 
 const FIXTURES = join(import.meta.dirname, '../../../../fixtures/goibibo');
@@ -9,6 +9,7 @@ const RUNNING = readFileSync(
   join(FIXTURES, '12951-2026-10-30T0504IST-running-29oct-excerpt.html'),
   'utf8',
 );
+const FULL_PAGE = join(FIXTURES, '12951-2026-10-30T0504IST-running-29oct.html');
 const STALE = readFileSync(join(FIXTURES, '12017-2026-11-02T0650IST-stale-excerpt.html'), 'utf8');
 const NO_DATA = readFileSync(
   join(FIXTURES, '12017-2026-11-02T0905IST-no-data-excerpt.html'),
@@ -135,5 +136,42 @@ describe('parseGoibiboLive on a bad response', () => {
 
   it('gives no run date when it cannot read one', () => {
     expect(parseGoibiboLive(fetched('<html></html>'), RAW_ID).journeyDate).toBeNull();
+  });
+});
+
+describe('goibiboTrainData', () => {
+  it('keeps the running status, which the parser still reads exactly as before', () => {
+    const kept = goibiboTrainData(RUNNING);
+    expect(kept).not.toBeNull();
+    expect(parseGoibiboLive(fetched(kept ?? ''), RAW_ID)).toEqual(running);
+  });
+
+  it('is smaller than the excerpt it was cut from, with nothing of the status lost', () => {
+    const kept = goibiboTrainData(RUNNING) ?? '';
+    expect(kept.length).toBeLessThan(RUNNING.length);
+    expect(parseGoibiboLive(fetched(kept), RAW_ID).events).toEqual(running.events);
+  });
+
+  it.skipIf(!existsSync(FULL_PAGE))(
+    'cuts the real 2.9 MB page to a few percent of its size, which the parser reads as before',
+    () => {
+      const whole = readFileSync(FULL_PAGE, 'utf8');
+      const kept = goibiboTrainData(whole) ?? '';
+      expect(kept.length).toBeLessThan(whole.length / 20);
+      expect(parseGoibiboLive(fetched(whole), RAW_ID)).toEqual(running);
+      expect(parseGoibiboLive(fetched(kept), RAW_ID)).toEqual(running);
+    },
+  );
+
+  it('keeps the page that says No data, which the parser still reads as unavailable', () => {
+    const kept = goibiboTrainData(NO_DATA);
+    expect(parseGoibiboLive(fetched(kept ?? ''), RAW_ID).isUnavailable).toBe(true);
+  });
+
+  it('returns null for a page with no running status', () => {
+    expect(goibiboTrainData('<html>hello</html>')).toBeNull();
+    expect(
+      goibiboTrainData('<script id="__NEXT_DATA__" type="application/json">{oops</script>'),
+    ).toBeNull();
   });
 });
