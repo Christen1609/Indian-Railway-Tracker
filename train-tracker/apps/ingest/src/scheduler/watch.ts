@@ -1,17 +1,13 @@
-// Features: when a train is next worth a look, the budget gate, one pass over the list, holding back a failing train
+// Features: when a train is next worth a look, one pass over the list, holding back a held or failing train
 
-import { backoffMin, sourceUsable } from '@train-tracker/core/schedule/health';
+import { backoffMin } from '@train-tracker/core/schedule/health';
 import { nextJourneyCheck } from '@train-tracker/core/schedule/next-check';
-import { quotaCheck } from '@train-tracker/core/schedule/quota';
 import { plusMinutes } from '@train-tracker/core/time';
-import type { IsoUtc, SourceId } from '@train-tracker/core/types';
+import type { IsoUtc } from '@train-tracker/core/types';
 import type { Config } from '../config.js';
-import { callsThisMonth, latestJourneyFor, stateFor, timetableFor } from '../db/journey-data.js';
-import { healthFor } from '../db/source-health.js';
+import { latestJourneyFor, stateFor, timetableFor } from '../db/journey-data.js';
 import { log } from '../log.js';
 import { checkJourney } from './check-journey.js';
-
-const RAILRADAR: SourceId = 'railradar';
 
 type Hold = { failures: number; until: IsoUtc };
 
@@ -40,7 +36,7 @@ async function nextLook(trainNumber: string, run: Run, now: IsoUtc): Promise<Iso
   });
 }
 
-/** Checks one watched train when it is due and allowed, and says when to look again, or null once the budget is spent */
+/** Checks one watched train when it is due, and says when to look again, which is the gate's ready time when it holds the check */
 async function pass(trainNumber: string, run: Run): Promise<IsoUtc | null> {
   const now = new Date().toISOString();
   const hold = run.holds.get(trainNumber);
@@ -55,38 +51,20 @@ async function pass(trainNumber: string, run: Run): Promise<IsoUtc | null> {
     return due;
   }
 
-  const health = await healthFor(RAILRADAR, run.config.db); // how the source is behaving, from healthFor
-  const usable = sourceUsable(health, now); // whether it may be called, from sourceUsable
-
-  if (!usable.usable) {
-    log('warn', usable.reason, {
-      source: RAILRADAR,
-      trainNumber,
-      failures: health.failures,
-      readyAt: usable.readyAt,
-    });
-    return usable.readyAt;
-  }
-
-  const spentThisMonth = await callsThisMonth(RAILRADAR, now, run.config.db); // calls so far, from callsThisMonth
-  // whether the budget allows this call, from quotaCheck
-  const budget = quotaCheck({ ...run.config.quota, spentThisMonth });
-
-  if (!budget.spend) {
-    log('warn', budget.reason, { source: RAILRADAR, trainNumber, spentThisMonth });
-    return null;
-  }
-
   // the result of one check, from checkJourney
   const outcome = await checkJourney({
     trainNumber,
     config: run.config,
-    health,
     watchingSince: run.watchingSince,
+    dueAt: due,
     now,
   });
+  if (outcome.kind === 'held') {
+    run.holds.set(trainNumber, { failures: 0, until: outcome.readyAt });
+    return outcome.readyAt;
+  }
   run.holds.delete(trainNumber);
-  return outcome?.nextCheckAt ?? now;
+  return outcome.nextCheckAt ?? now;
 }
 
 /** Holds a train back after a failed pass, longer each time, and says until when */
