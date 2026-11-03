@@ -1,17 +1,23 @@
-// Features: one check of one journey, from the fetch to the state the browser reads
+// Features: one check of one journey, from the run date to the state the browser reads, without RailRadar
 
 import { windowHits } from '@train-tracker/core/accuracy/score';
 import { estimate } from '@train-tracker/core/estimate';
-import { afterFailure, afterSuccess, callVerdict } from '@train-tracker/core/schedule/health';
-import type { SourceHealth } from '@train-tracker/core/schedule/health';
-import { normalizeEvents } from '@train-tracker/core/fusion/normalize';
+import { feedIsStalled } from '@train-tracker/core/schedule/health';
 import { resolveEvents } from '@train-tracker/core/fusion/resolve';
-import { nextCheck } from '@train-tracker/core/schedule/next-check';
-import { parseRailRadarLive } from '@train-tracker/core/sources/railradar';
-import type { IsoDate, IsoUtc, RawFetch, ResolvedEvent, SourceId } from '@train-tracker/core/types';
-import { fetchRailRadarLive } from '../adapters/railradar.js';
+import { hasLeftOrigin, nextCheck } from '@train-tracker/core/schedule/next-check';
+import type { CheckReason } from '@train-tracker/core/schedule/next-check';
+import { currentRunDate } from '@train-tracker/core/schedule/run-date';
+import { istDateOf, plusDays } from '@train-tracker/core/time';
+import type {
+  Estimate,
+  IsoDate,
+  IsoUtc,
+  ResolvedEvent,
+  TimetableStop,
+} from '@train-tracker/core/types';
 import {
   journeyFor,
+  journeyStatusOn,
   loggedWindowsFor,
   saveEstimate,
   saveWindowHits,
@@ -19,35 +25,37 @@ import {
   stationPointsFor,
   resolvedFor,
   saveResolvedEvents,
-  saveSourceEvents,
   saveTrainState,
   sourceEventsFor,
+  stateFor,
   timetableFor,
   topSpeedFor,
 } from '../db/journey-data.js';
-import { insertRawFetch, rawFetchRow, readsFor } from '../db/raw-fetches.js';
-import { saveHealth } from '../db/source-health.js';
+import { readsFor } from '../db/raw-fetches.js';
 import { log } from '../log.js';
 import type { Config } from '../config.js';
+import { askSources } from './check-sources.js';
 
-const RAILRADAR: SourceId = 'railradar';
-const NO_JOURNEY = null;
+const YESTERDAY = -1;
 
 export type CheckInput = {
   trainNumber: string;
   config: Config;
-  health: SourceHealth;
   watchingSince: IsoUtc;
+  dueAt: IsoUtc;
   now: IsoUtc;
 };
 
-export type CheckOutcome = {
-  journeyId: string;
-  journeyDate: IsoDate;
-  nextCheckAt: IsoUtc | null;
-  confirmed: number;
-  rejected: number;
-};
+export type CheckOutcome =
+  | { kind: 'held'; readyAt: IsoUtc }
+  | {
+      kind: 'done';
+      journeyId: string;
+      journeyDate: IsoDate;
+      nextCheckAt: IsoUtc | null;
+      confirmed: number;
+      rejected: number;
+    };
 
 /** Grades the windows we showed for any arrival this check was the first to confirm */
 async function gradeNewArrivals(
@@ -71,57 +79,41 @@ async function gradeNewArrivals(
   return graded;
 }
 
-/** Saves the source's health after a call, and says whether the call failed */
-async function saveCallHealth(
-  input: CheckInput,
-  raw: RawFetch,
-  parseErrors: number,
-  unknownHalts: number,
-): Promise<boolean> {
-  // whether this call counts against the source, from callVerdict
-  const verdict = callVerdict({
-    status: raw.status,
-    hasError: raw.error !== undefined,
-    parseErrors,
-    unknownHalts,
-  });
-  await saveHealth(
-    RAILRADAR,
-    verdict.failed ? afterFailure(input.health, input.now, verdict.isRateLimited) : afterSuccess(),
-    input.now,
-    input.config.db,
-  );
-  return verdict.failed;
+/** Why this check is due, as far as RailRadar cares: not an arrival until the train has left and a state exists */
+function checkReason(
+  hasState: boolean,
+  confirmed: readonly ResolvedEvent[],
+  stops: readonly TimetableStop[],
+  where: Estimate,
+): CheckReason {
+  if (!hasState) {
+    return 'catch_up';
+  }
+  if (!hasLeftOrigin(confirmed, stops)) {
+    return 'departure';
+  }
+  return where.state === 'late' ? 'late' : 'window_open';
 }
 
-/** Runs one check of one journey, saving the raw response before anything can fail */
-export async function checkJourney(input: CheckInput): Promise<CheckOutcome | null> {
+/** Runs one check of one journey: the run first, then the scrape sources in order */
+export async function checkJourney(input: CheckInput): Promise<CheckOutcome> {
   const { trainNumber, config, now } = input;
-  const raw = await fetchRailRadarLive(trainNumber, config.railRadarApiKey); // the response, from fetchRailRadarLive
-  const parsed = parseRailRadarLive(raw, ''); // the run and events it named, from parseRailRadarLive
-  const journeyDate = parsed.journeyDate;
-
-  if (journeyDate === null) {
-    await saveCallHealth(input, raw, parsed.errors.length, 0);
-    await insertRawFetch(rawFetchRow(raw, NO_JOURNEY), config.db);
-    log('warn', 'check_unreadable', {
-      source: RAILRADAR,
-      trainNumber,
-      status: raw.status,
-      error: raw.error,
-      errors: parsed.errors.join(' | '),
-    });
-    return null;
-  }
-
-  const journey = await journeyFor(trainNumber, journeyDate, config.db); // the journey, from journeyFor
-  const rawFetchId = await insertRawFetch(rawFetchRow(raw, journey.id), config.db); // the stored row, from insertRawFetch
-
-  const [stops, topSpeedKmh, caps, confirmedBefore] = await Promise.all([
+  const [stops, topSpeedKmh, caps] = await Promise.all([
     timetableFor(trainNumber, config.db),
     topSpeedFor(trainNumber, config.db),
     sectionCapsFor(trainNumber, config.db),
+  ]);
+  const yesterday = await journeyStatusOn(
+    trainNumber,
+    plusDays(istDateOf(now), YESTERDAY),
+    config.db,
+  ); // how yesterday's run stands, from journeyStatusOn
+  const journeyDate = currentRunDate({ stops, now, yesterday }); // the run to follow, from currentRunDate
+  const journey = await journeyFor(trainNumber, journeyDate, config.db); // the journey, from journeyFor
+
+  const [confirmedBefore, memory] = await Promise.all([
     resolvedFor(journey.id, config.db),
+    stateFor(journey.id, config.db),
   ]);
   const learnedCaps = new Map(caps.map((cap) => [cap.fromSeq, cap.fastestPace]));
   // coordinates of our stops, from stationPointsFor
@@ -129,34 +121,45 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     stops.map((stop) => stop.stationCode),
     config.db,
   );
+  const context = {
+    journeyDate,
+    stops,
+    topSpeedKmh,
+    learnedCaps,
+    confirmed: confirmedBefore,
+    stations,
+  };
 
-  // events with the nonsense rules applied, from normalizeEvents
-  const normalized = normalizeEvents(
-    parsed.events.map((event) => ({ ...event, rawFetchId })),
-    {
-      journeyDate,
-      stops,
-      topSpeedKmh,
-      learnedCaps,
-      confirmed: confirmedBefore,
-      stations,
-    },
-  );
-  const unknownHalts = normalized.filter((event) => event.rejected === 'unknown_halt').length;
-  const failed = await saveCallHealth(input, raw, parsed.errors.length, unknownHalts); // whether the call failed, from saveCallHealth
-  await saveSourceEvents(normalized, journey.id, config.db);
+  // where the train stood before this check, from estimate
+  const before = estimate({
+    journeyDate,
+    stops,
+    confirmed: confirmedBefore,
+    topSpeedKmh,
+    learnedCaps,
+    now,
+  });
+  // the scrape sources' answer, from askSources
+  const sources = await askSources({
+    trainNumber,
+    journey,
+    config,
+    now,
+    dueAt: input.dueAt,
+    context,
+    check: checkReason(memory !== null, confirmedBefore, stops, before),
+    windowStart: before.window?.windowStart ?? null,
+  });
+  if (sources.status === 'held' && sources.events.length === 0) {
+    return { kind: 'held', readyAt: sources.readyAt ?? now };
+  }
 
   const [events, reads] = await Promise.all([
     sourceEventsFor({ id: journey.id, trainNumber, journeyDate }, config.db), // every surviving event so far, from sourceEventsFor
     readsFor(journey.id, config.db), // every read so far, from readsFor
   ]);
   // one event per station and type, from resolveEvents
-  const resolved = resolveEvents({
-    journeyId: journey.id,
-    events,
-    reads,
-    resolvedAt: now,
-  });
+  const resolved = resolveEvents({ journeyId: journey.id, events, reads, resolvedAt: now });
   const graded = await gradeNewArrivals(journey.id, confirmedBefore, resolved, config.db); // arrivals graded, from gradeNewArrivals
   await saveResolvedEvents(resolved, config.db);
 
@@ -167,6 +170,7 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     confirmed: resolved,
     topSpeedKmh,
     learnedCaps,
+    isFeedStalled: feedIsStalled(sources.updatedAts, now), // whether the pages are old, from feedIsStalled
     now,
   });
   // when it is next due a check, from nextCheck
@@ -181,21 +185,16 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     now,
     intervals: config.intervals,
   });
+  const nextCheckAt = sources.status === 'held' ? input.dueAt : due.at;
 
-  await saveTrainState(
-    { ...where, journeyId: journey.id, nextCheckAt: due.at, updatedAt: now },
-    config.db,
-  );
+  await saveTrainState({ ...where, journeyId: journey.id, nextCheckAt, updatedAt: now }, config.db);
   await saveEstimate(journey.id, where, now, config.db);
 
-  const rejected = normalized.filter((event) => event.rejected !== undefined).length;
+  const rejected = sources.events.filter((event) => event.rejected !== undefined).length;
   log('info', 'checked', {
-    source: RAILRADAR,
-    failed,
     trainNumber,
     journeyDate,
-    status: raw.status,
-    latencyMs: raw.latencyMs,
+    status: sources.status,
     state: where.state,
     km: Math.round(where.km),
     delayMin: where.delayMin,
@@ -203,13 +202,16 @@ export async function checkJourney(input: CheckInput): Promise<CheckOutcome | nu
     confirmed: resolved.length,
     graded,
     rejected,
-    unknownHalts,
+    radar: sources.railRadar?.reason,
     reason: due.reason,
-    nextCheckAt: due.at,
-    parseErrors: parsed.errors.length,
+    nextCheckAt,
   });
 
+  if (sources.status === 'held') {
+    return { kind: 'held', readyAt: sources.readyAt ?? now };
+  }
   return {
+    kind: 'done',
     journeyId: journey.id,
     journeyDate,
     nextCheckAt: due.at,
