@@ -1,17 +1,22 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveEvents } from '@train-tracker/core/fusion/resolve';
+import { HEALTHY, afterFailure } from '@train-tracker/core/schedule/health';
 import { timetableMinuteToUtc } from '@train-tracker/core/time';
-import type { EventType, ResolvedEvent } from '@train-tracker/core/types';
+import type { EventType, RawFetch, ResolvedEvent } from '@train-tracker/core/types';
 import {
   JOURNEY_DATE,
   STOPS_12951 as STOPS,
 } from '../../../../packages/core/src/testing/journey-12951.js';
+import { fetchRailRadarLive } from '../adapters/railradar.js';
 import type { Config } from '../config.js';
 import {
   journeyFor,
   journeyStatusOn,
   resolvedFor,
   saveResolvedEvents,
+  saveSourceEvents,
   saveTrainState,
   sectionCapsFor,
   sourceEventsFor,
@@ -21,18 +26,21 @@ import {
   topSpeedFor,
 } from '../db/journey-data.js';
 import { insertRawFetch, readsFor } from '../db/raw-fetches.js';
+import { healthFor, saveHealth } from '../db/source-health.js';
 import { askSources } from './check-sources.js';
 import type { SourcesResult } from './check-sources.js';
 import { checkJourney } from './check-journey.js';
 import type { CheckInput } from './check-journey.js';
 import { settleScrape } from './scrape.js';
 
+vi.mock('../adapters/railradar.js');
 vi.mock('../db/journey-data.js');
 vi.mock('../db/raw-fetches.js', async (original) => ({
   ...(await original<typeof import('../db/raw-fetches.js')>()),
   insertRawFetch: vi.fn(),
   readsFor: vi.fn(),
 }));
+vi.mock('../db/source-health.js');
 vi.mock('../log.js');
 vi.mock('./check-sources.js');
 vi.mock('./scrape.js');
@@ -41,6 +49,10 @@ vi.mock('@train-tracker/core/fusion/resolve', async (original) => {
   return { ...real, resolveEvents: vi.fn(real.resolveEvents) };
 });
 
+const RADAR_BODY = readFileSync(
+  join(import.meta.dirname, '../../../../fixtures/railradar/12951-live.json'),
+  'utf8',
+);
 const EVENING = timetableMinuteToUtc(JOURNEY_DATE, 1050);
 const EARLY_MORNING = timetableMinuteToUtc(JOURNEY_DATE, 240);
 const DUE_AT = timetableMinuteToUtc(JOURNEY_DATE, 1045);
@@ -85,6 +97,19 @@ function resolved(stationCode: string, type: EventType, minute: number): Resolve
   };
 }
 
+/** RailRadar's reply as the adapter hands it over */
+function radarReply(over: Partial<RawFetch> = {}): RawFetch {
+  return {
+    source: 'railradar',
+    url: 'https://api.railradar.in/v1/trains/12951/live',
+    status: 200,
+    body: RADAR_BODY,
+    fetchedAt: EVENING,
+    latencyMs: 300,
+    ...over,
+  };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(timetableFor).mockResolvedValue(STOPS);
@@ -97,8 +122,10 @@ beforeEach(() => {
   vi.mocked(stationPointsFor).mockResolvedValue(new Map());
   vi.mocked(sourceEventsFor).mockResolvedValue([]);
   vi.mocked(readsFor).mockResolvedValue([]);
+  vi.mocked(healthFor).mockResolvedValue(HEALTHY);
   vi.mocked(insertRawFetch).mockResolvedValue('raw-1');
   vi.mocked(askSources).mockResolvedValue(DONE);
+  vi.mocked(fetchRailRadarLive).mockResolvedValue(radarReply());
 });
 
 describe('checkJourney, the run date comes first', () => {
@@ -165,6 +192,11 @@ describe('checkJourney, a healthy two-source check', () => {
     expect(settleScrape).not.toHaveBeenCalled();
   });
 
+  it('does not call RailRadar when the plan says no', async () => {
+    await checkJourney(input(EVENING));
+    expect(fetchRailRadarLive).not.toHaveBeenCalled();
+  });
+
   it('sets the next check from the ladder, not the time this one was due', async () => {
     const outcome = await checkJourney(input(EVENING));
     expect(outcome.kind === 'done' && outcome.nextCheckAt).not.toBe(DUE_AT);
@@ -204,6 +236,83 @@ describe('checkJourney, the gate holding the check', () => {
     expect(outcome).toEqual({ kind: 'held', readyAt: '2026-10-21T12:02:00.000Z' });
     expect(saveTrainState).not.toHaveBeenCalled();
     expect(saveResolvedEvents).not.toHaveBeenCalled();
+  });
+
+  it('never calls RailRadar while held', async () => {
+    vi.mocked(askSources).mockResolvedValue({
+      ...held,
+      railRadar: { ask: true, reason: 'fallback' },
+    });
+    await checkJourney(input(EVENING));
+    expect(fetchRailRadarLive).not.toHaveBeenCalled();
+  });
+});
+
+describe('checkJourney, RailRadar when the plan asks', () => {
+  beforeEach(() => {
+    vi.mocked(askSources).mockResolvedValue({
+      ...DONE,
+      railRadar: { ask: true, reason: 'fallback' },
+    });
+  });
+
+  it('stores the reply against the journey, parses it, then records the health', async () => {
+    await checkJourney(input(EVENING));
+
+    expect(fetchRailRadarLive).toHaveBeenCalledWith('12951', 'key');
+    expect(vi.mocked(insertRawFetch).mock.calls[0]?.[0]).toMatchObject({
+      journey_id: 'j1',
+      source: 'railradar',
+      error: null,
+    });
+    expect(saveSourceEvents).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(insertRawFetch).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(saveHealth).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('has already stored the reply when recording the health fails', async () => {
+    vi.mocked(saveHealth).mockRejectedValue(new Error('db down'));
+
+    await expect(checkJourney(input(EVENING))).rejects.toThrow('db down');
+
+    expect(insertRawFetch).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(insertRawFetch).mock.calls[0]?.[0]).toMatchObject({
+      journey_id: 'j1',
+      body: RADAR_BODY,
+    });
+  });
+
+  it('stores a reply for another run as wrong_run, and counts neither a failure nor an event', async () => {
+    const nextDay = timetableMinuteToUtc('2026-10-22', 1050);
+    await checkJourney(input(nextDay, { dueAt: timetableMinuteToUtc('2026-10-22', 1045) }));
+
+    expect(vi.mocked(insertRawFetch).mock.calls[0]?.[0]).toMatchObject({
+      journey_id: 'j1',
+      error: 'wrong_run',
+    });
+    expect(saveHealth).not.toHaveBeenCalled();
+    expect(saveSourceEvents).not.toHaveBeenCalled();
+  });
+
+  it('records a failure and saves nothing for a reply it cannot read', async () => {
+    vi.mocked(fetchRailRadarLive).mockResolvedValue(
+      radarReply({ status: 502, body: 'Bad gateway' }),
+    );
+    await checkJourney(input(EVENING));
+    expect(vi.mocked(saveHealth).mock.calls[0]?.[1]).toMatchObject({ failures: 1 });
+    expect(saveSourceEvents).not.toHaveBeenCalled();
+    expect(insertRawFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('is not called while its circuit is open', async () => {
+    let health = HEALTHY;
+    for (let count = 0; count < 5; count += 1) {
+      health = afterFailure(health, EVENING, false);
+    }
+    vi.mocked(healthFor).mockResolvedValue(health);
+    await checkJourney(input(EVENING));
+    expect(fetchRailRadarLive).not.toHaveBeenCalled();
   });
 });
 
