@@ -9,7 +9,9 @@ const MS_PER_S = 1000;
 const HALF_TURN_DEG = 180;
 const FULL_TURN_DEG = 360;
 const MOBILE_MAX_WIDTH_PX = 760;
-const DESKTOP_COLUMN_PX = 600;
+const DESKTOP_RADIUS_SHARE = 0.42;
+const MOBILE_RADIUS_SHARE = 0.58;
+const CAMERA_HEIGHTS = 1.5;
 const SCHEME_QUERY = '(prefers-color-scheme: dark)';
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)';
 const CURSOR_QUERY = '(hover: hover) and (pointer: fine)';
@@ -26,23 +28,23 @@ const STILL_MS = 80;
 const VELOCITY_BLEND = 0.5;
 const GLOBE_CIRCUMFERENCE_PX = 512;
 
-/** Zoom and padding that put the globe beside the column on wide screens and below the text on phones */
-function framing() {
-  if (window.innerWidth <= MOBILE_MAX_WIDTH_PX) {
-    return {
-      zoom: 1.6,
-      padding: { top: Math.round(window.innerHeight * 0.5), bottom: 0, left: 0, right: 0 },
-    };
-  }
-  return {
-    zoom: 2.6,
-    padding: {
-      top: Math.round(window.innerHeight * 0.22),
-      bottom: 0,
-      left: Math.min(DESKTOP_COLUMN_PX, Math.round(window.innerWidth * 0.42)),
-      right: 0,
-    },
-  };
+/**
+ * Zoom that draws the globe, centred on the page, at a set on-screen radius.
+ * The camera sits 1.5 viewport heights from the surface (MapLibre's default field of view),
+ * so the outline seen in perspective is smaller than the globe's true radius.
+ */
+function centredZoom(): number {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const radiusPx =
+    width <= MOBILE_MAX_WIDTH_PX
+      ? Math.min(width * MOBILE_RADIUS_SHARE, height * DESKTOP_RADIUS_SHARE)
+      : Math.min(width, height) * DESKTOP_RADIUS_SHARE;
+  const camera = height * CAMERA_HEIGHTS;
+  const sin = Math.sin(Math.atan(radiusPx / camera));
+  const globeRadius = (camera * sin) / (1 - sin);
+  const latScale = Math.cos((INDIA[1] * Math.PI) / HALF_TURN_DEG);
+  return Math.log2((2 * Math.PI * latScale * globeRadius) / GLOBE_CIRCUMFERENCE_PX);
 }
 
 /** Longitude wrapped into -180 to 180 */
@@ -68,7 +70,7 @@ export function LandingMap() {
     const scheme = window.matchMedia(SCHEME_QUERY);
     const reduced = window.matchMedia(REDUCED_QUERY);
     const cursor = window.matchMedia(CURSOR_QUERY);
-    const { zoom, padding } = framing();
+    const zoom = centredZoom();
     const degPerPx = DRAG_TURN_DEG / ((GLOBE_CIRCUMFERENCE_PX * 2 ** zoom) / Math.PI);
     const map = new MapLibreMap({
       container,
@@ -79,7 +81,6 @@ export function LandingMap() {
       attributionControl: false,
       fadeDuration: 0,
     });
-    map.setPadding(padding);
     let frameId = 0;
     let lastFrameAt: number | null = null;
     let spinLng = INDIA[0];
@@ -145,10 +146,8 @@ export function LandingMap() {
       }
       const width = window.innerWidth;
       const height = window.innerHeight;
-      const centreX = padding.left + (width - padding.left - padding.right) / 2;
-      const centreY = padding.top + (height - padding.top - padding.bottom) / 2;
-      targetLng = -clamp((event.clientX - centreX) / (width / 2), -1, 1) * FOLLOW_LNG_DEG;
-      targetLat = clamp((event.clientY - centreY) / (height / 2), -1, 1) * FOLLOW_LAT_DEG;
+      targetLng = -clamp((event.clientX - width / 2) / (width / 2), -1, 1) * FOLLOW_LNG_DEG;
+      targetLat = clamp((event.clientY - height / 2) / (height / 2), -1, 1) * FOLLOW_LAT_DEG;
     };
 
     /** Ease the globe back when the cursor leaves the page */
