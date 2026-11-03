@@ -161,3 +161,17 @@ describe('confirmtktTrainData', () => {
     expect(confirmtktTrainData('<html>hello</html>')).toBeNull();
   });
 });
+
+describe('parseConfirmTktLive, when the page was updated', () => {
+  it('reads Last Updated as IST and gives it as UTC', () => {
+    expect(running.updatedAt).toBe('2026-10-29T22:55:00.000Z');
+    expect(notStarted.updatedAt).toBe('2026-10-28T18:35:00.000Z');
+    expect(justLeft.updatedAt).toBe('2026-11-02T01:20:00.000Z');
+  });
+
+  it('still reads the events when Last Updated is missing, and gives none', () => {
+    const odd = parseConfirmTktLive(fetched(RUNNING.replace('Last Updated:', 'Checked:')), RAW_ID);
+    expect(odd.events).toEqual(running.events);
+    expect(odd.updatedAt).toBeUndefined();
+  });
+});

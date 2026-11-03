@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { istWallToUtc } from '../time.js';
 import { canonicalStationCode } from './stations.js';
 import type { ParseResult } from './railradar.js';
-import type { EventType, IsoDate, RawFetch, SourceEvent } from '../types.js';
+import type { EventType, IsoDate, IsoUtc, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'goibibo_scrape';
 const OK = 200;
@@ -14,6 +14,7 @@ const ORIGIN_ORDER = 0;
 const NO_DATA_CODE = 'TLSV2007';
 const NO_DATA_MESSAGE = 'No data';
 const DATE_LENGTH = 10;
+const UPDATED = /^(\d{2}-\d{2}-\d{4}) (\d{2}:\d{2}):\d{2}$/;
 
 const Stop = z.object({
   Station: z.object({ code: z.string().min(1) }),
@@ -40,6 +41,7 @@ const Page = z.object({
               StartDate: z.string().regex(DAY_MONTH_YEAR),
             }),
             Stations: z.array(Stop).min(1),
+            LastUpdated: z.string().optional(),
           }),
         }),
       }),
@@ -64,6 +66,14 @@ const NoData = z.object({
 /** An ISO date from Goibibo's day-month-year date */
 function isoDateOf(dayMonthYear: string): IsoDate {
   return dayMonthYear.slice(0, DATE_LENGTH).replace(DAY_MONTH_YEAR, '$3-$2-$1');
+}
+
+/** When the page says it was updated, in UTC, or undefined when it says nothing we can read */
+function updatedAtOf(text: string | undefined): IsoUtc | undefined {
+  const parts = UPDATED.exec(text ?? '');
+  return parts === null
+    ? undefined
+    : (istWallToUtc(isoDateOf(parts[1] ?? ''), parts[2] ?? '') ?? undefined);
 }
 
 /** Events from one Goibibo live page, with every problem found */
@@ -100,7 +110,7 @@ export function parseGoibiboLive(raw: RawFetch, rawFetchId: string): ParseResult
     );
   }
 
-  const { TrainDetails, Stations } =
+  const { TrainDetails, Stations, LastUpdated } =
     parsed.data.props.pageProps.initialSeoData.data.liveStatusApiResponse;
   const journeyDate = isoDateOf(TrainDetails.StartDate);
   const events: SourceEvent[] = [];
@@ -145,7 +155,13 @@ export function parseGoibiboLive(raw: RawFetch, rawFetchId: string): ParseResult
     }
   });
 
-  return { events: errors.length > 0 ? [] : events, errors, journeyDate };
+  const updatedAt = updatedAtOf(LastUpdated); // when the page was updated, from updatedAtOf
+  return {
+    events: errors.length > 0 ? [] : events,
+    errors,
+    journeyDate,
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  };
 }
 
 /** The part of a __NEXT_DATA__ page at a path, as a page of its own the parser still reads, or null when it is not there */

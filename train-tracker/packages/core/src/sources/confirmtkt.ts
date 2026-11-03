@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { dayMonthToIso, istWallToUtc } from '../time.js';
 import { canonicalStationCode } from './stations.js';
 import type { ParseResult } from './railradar.js';
-import type { EventType, RawFetch, SourceEvent } from '../types.js';
+import type { EventType, IsoUtc, RawFetch, SourceEvent } from '../types.js';
 
 const SOURCE = 'confirmtkt_scrape';
 const OK = 200;
@@ -19,6 +19,7 @@ const DAY_DATE = /<span>Day \d+<\/span>(?:&nbsp;|\s)*<span>(\d{1,2})-([A-Za-z]{3
 const TIME_CELL = /<div class="col-xs-2">\s*<span>([^<]*)<\/span>/g;
 const TICK = 'bi-check-circle';
 const DISCLAIMER = 'Disclaimer';
+const UPDATED = /Last Updated:(?:&nbsp;|\s)*(\d{1,2}) ([A-Za-z]{3}) (\d{4}) (\d{2}:\d{2})/;
 const TRAIN_NUMBER = /"TrainNumberString":"(\d+)"/;
 const ORIGIN_ORDER = 0;
 const FIRST_ARRIVAL = 0;
@@ -73,6 +74,16 @@ function rowsIn(html: string): { reads: RowRead[]; errors: string[] } {
     reads.push({ row: parsed.data, isPassed: piece.slice(0, name?.index).includes(TICK) });
   }
   return { reads, errors };
+}
+
+/** When the page says it was updated, in UTC, or undefined when it says nothing we can read */
+function updatedAtOf(body: string): IsoUtc | undefined {
+  const parts = UPDATED.exec(body);
+  const date =
+    parts === null ? null : dayMonthToIso(parts[1] ?? '', parts[2] ?? '', Number(parts[3]));
+  return date === null || parts === null
+    ? undefined
+    : (istWallToUtc(date, parts[4] ?? '') ?? undefined);
 }
 
 /** Events from one ConfirmTkt running status page, with every problem found */
@@ -157,7 +168,13 @@ export function parseConfirmTktLive(raw: RawFetch, rawFetchId: string): ParseRes
     }
   }
 
-  return { events: problems.length > 0 ? [] : events, errors: problems, journeyDate };
+  const updatedAt = updatedAtOf(raw.body); // when the page was updated, from updatedAtOf
+  return {
+    events: problems.length > 0 ? [] : events,
+    errors: problems,
+    journeyDate,
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  };
 }
 
 /** A ConfirmTkt page cut down to its train number, station list, date list and status rows, or null when it has no rows */
@@ -178,5 +195,6 @@ export function confirmtktTrainData(body: string): string | null {
   ) {
     return null;
   }
-  return `<script>{${number}}</script>\n${codes}\n${dates}\n<div ${body.slice(start, end)}`;
+  const updated = UPDATED.exec(body)?.[0] ?? '';
+  return `<script>{${number}}</script>\n${updated}\n${codes}\n${dates}\n<div ${body.slice(start, end)}`;
 }

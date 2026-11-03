@@ -6,6 +6,7 @@ import {
   afterSuccess,
   backoffMin,
   callVerdict,
+  feedIsStalled,
   sourceUsable,
 } from './health.js';
 import type { SourceHealth } from './health.js';
@@ -153,5 +154,35 @@ describe('afterSuccess', () => {
   it('forgets every failure, so a recovered source is not still punished', () => {
     expect(afterSuccess()).toEqual(HEALTHY);
     expect(sourceUsable(afterSuccess(), NOW).usable).toBe(true);
+  });
+});
+
+describe('feedIsStalled', () => {
+  const minutesAgo = (minutes: number): string =>
+    new Date(Date.parse(NOW) - minutes * 60_000).toISOString();
+
+  it('is not stalled when no page said when it was updated', () => {
+    expect(feedIsStalled([], NOW)).toBe(false);
+    expect(feedIsStalled([undefined, undefined], NOW)).toBe(false);
+  });
+
+  it('is stalled only when the page is over 30 minutes old', () => {
+    expect(feedIsStalled([minutesAgo(29)], NOW)).toBe(false);
+    expect(feedIsStalled([minutesAgo(30)], NOW)).toBe(false);
+    expect(feedIsStalled([minutesAgo(31)], NOW)).toBe(true);
+  });
+
+  it('goes by the newest page, so one fresh page clears a stale one', () => {
+    expect(feedIsStalled([minutesAgo(600), minutesAgo(5)], NOW)).toBe(false);
+    expect(feedIsStalled([minutesAgo(600), minutesAgo(90)], NOW)).toBe(true);
+  });
+
+  it('ignores pages that did not say when they were updated', () => {
+    expect(feedIsStalled([undefined, minutesAgo(5)], NOW)).toBe(false);
+    expect(feedIsStalled([undefined, minutesAgo(90)], NOW)).toBe(true);
+  });
+
+  it('does not call a page stalled for being slightly ahead of the clock', () => {
+    expect(feedIsStalled([minutesAgo(-2)], NOW)).toBe(false);
   });
 });

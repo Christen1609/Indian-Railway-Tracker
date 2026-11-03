@@ -1,6 +1,6 @@
-// Features: what counts as a failure, the backoff, the circuit breaker
+// Features: what counts as a failure, the backoff, the circuit breaker, a stalled feed
 
-import { minutesBetween, plusMinutes } from '../time.js';
+import { minutesBetween, plusMinutes, secondsBetween } from '../time.js';
 import type { IsoUtc } from '../types.js';
 
 const BACKOFF_FIRST_MIN = 1;
@@ -11,6 +11,7 @@ const CIRCUIT_OPEN_MIN = 60;
 const TOO_MANY_REQUESTS = 429;
 const OK = 200;
 const NO_FAILURES = 0;
+const STALLED_AFTER_SECONDS = 30 * 60;
 
 export type SourceHealth = {
   failures: number;
@@ -94,4 +95,14 @@ export function afterFailure(
 /** The health of a source after a call worked */
 export function afterSuccess(): SourceHealth {
   return HEALTHY;
+}
+
+/** Whether the newest page of a check is over 30 minutes old, which means no news and not that the train has not arrived */
+export function feedIsStalled(updatedAts: readonly (IsoUtc | undefined)[], now: IsoUtc): boolean {
+  const known = updatedAts.filter((at): at is IsoUtc => at !== undefined);
+  const newest = known.reduce<IsoUtc | null>(
+    (best, at) => (best === null || secondsBetween(best, at) > 0 ? at : best),
+    null,
+  );
+  return newest !== null && secondsBetween(newest, now) > STALLED_AFTER_SECONDS;
 }
