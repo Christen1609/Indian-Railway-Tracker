@@ -1208,39 +1208,32 @@ a.brand {
   overflow-x: hidden;
   overflow-y: auto;
 }
-.landing::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--bg) 94%, transparent) 0,
-    color-mix(in srgb, var(--bg) 84%, transparent) 640px,
-    transparent 900px
-  );
-}
 .landing-col {
+  --landing-top: max(18px, env(safe-area-inset-top, 0px));
+  --landing-side: 64px;
   position: relative;
   z-index: 2;
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 28px;
-  width: min(100%, 600px);
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   min-height: 100dvh;
-  padding: max(18px, env(safe-area-inset-top, 0px)) 16px max(24px, env(safe-area-inset-bottom, 0px))
-    64px;
+  padding: calc(var(--landing-top) + 72px) 16px max(56px, env(safe-area-inset-bottom, 0px));
 }
 .landing-col > * {
   pointer-events: auto;
   min-width: 0;
   max-width: 100%;
 }
+.landing-col > .brand {
+  position: absolute;
+  top: var(--landing-top);
+  left: var(--landing-side);
+}
 .landing-col > section {
-  width: 100%;
+  width: min(100%, 520px);
 }
 .landing p {
   margin: 0;
@@ -1258,7 +1251,9 @@ a.brand {
   color: var(--sig-ink);
   border: 3px solid var(--sig-ink);
   border-radius: 4px;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.35),
+    0 24px 60px rgba(0, 0, 0, 0.55);
 }
 .sign h1 {
   display: flex;
@@ -1337,37 +1332,18 @@ a.brand {
 }
 
 .landing-attrib {
-  margin-top: auto !important;
+  position: fixed;
+  bottom: max(18px, env(safe-area-inset-bottom, 0px));
+  left: var(--landing-side);
   font-size: 13px !important;
   color: var(--muted);
 }
 .landing-attrib a {
   color: inherit;
 }
-@media (min-width: 761px) {
-  .landing-col {
-    justify-content: center;
-  }
-  .landing-attrib {
-    position: fixed;
-    bottom: 18px;
-    left: 64px;
-    margin: 0 !important;
-  }
-}
 @media (max-width: 760px) {
-  .landing::before {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg) 94%, transparent) 0,
-      color-mix(in srgb, var(--bg) 85%, transparent) 34%,
-      transparent 52%
-    );
-  }
   .landing-col {
-    width: 100%;
-    gap: 24px;
-    padding-left: 16px;
+    --landing-side: 16px;
   }
   .landing-attrib {
     padding: 2px 8px;
