@@ -8,6 +8,7 @@ import type {
   EventType,
   IsoDate,
   IsoUtc,
+  JourneyStatus,
   ResolvedEvent,
   SourceEvent,
   SourceId,
@@ -233,6 +234,35 @@ export async function callsThisMonth(
 ): Promise<number> {
   const since = istMonthStart(now); // the start of the IST month, from istMonthStart
   return countRows(`raw_fetches?source=eq.${source}&fetched_at=gte.${since}`, config); // the count, from countRows
+}
+
+const StatusRows = z.array(
+  z.object({
+    id: z.string().min(1),
+    status: z.enum(['scheduled', 'running', 'arrived', 'cancelled']),
+  }),
+);
+
+const StateKindRows = z.array(z.object({ state: z.string().min(1) }));
+
+/** How one run of a train stands: arrived once its state says so, though the journey is only marked when swept */
+export async function journeyStatusOn(
+  trainNumber: string,
+  journeyDate: IsoDate,
+  config: DbConfig,
+): Promise<JourneyStatus | null> {
+  const query = `journeys?train_number=eq.${trainNumber}&journey_date=eq.${journeyDate}&select=id,status`;
+  const journey = StatusRows.parse(await readRows(query, config))[0]; // the journey, from readRows
+  if (journey === undefined) {
+    return null;
+  }
+  if (journey.status === 'arrived' || journey.status === 'cancelled') {
+    return journey.status;
+  }
+  const kind = StateKindRows.parse(
+    await readRows(`train_state?journey_id=eq.${journey.id}&select=state`, config),
+  )[0]; // what we last wrote about it, from readRows
+  return kind?.state === 'arrived' ? 'arrived' : journey.status;
 }
 
 /** The newest journey we hold for one train, or null when we hold none */

@@ -69,7 +69,7 @@ function nextRung(anchorMin: number, gaps: readonly number[], lastMin: number | 
 }
 
 /** Whether the train has been confirmed to have left its origin */
-function hasLeftOrigin(
+export function hasLeftOrigin(
   confirmed: readonly ResolvedEvent[],
   stops: readonly TimetableStop[],
 ): boolean {
