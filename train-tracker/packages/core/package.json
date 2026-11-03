@@ -52,6 +52,10 @@
       "types": "./dist/schedule/next-check.d.ts",
       "import": "./dist/schedule/next-check.js"
     },
+    "./schedule/plan-check": {
+      "types": "./dist/schedule/plan-check.d.ts",
+      "import": "./dist/schedule/plan-check.js"
+    },
     "./schedule/quota": {
       "types": "./dist/schedule/quota.d.ts",
       "import": "./dist/schedule/quota.js"
