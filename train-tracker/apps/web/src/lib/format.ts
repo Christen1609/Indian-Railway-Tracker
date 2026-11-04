@@ -85,6 +85,32 @@ export function formatAgo(at: IsoUtc, now: IsoUtc): string {
   return `${Math.floor(minutes / MINUTES_PER_DAY)} d ago`;
 }
 
+/** IST clock of an instant on the journey, without its day */
+export function formatJourneyTime(journeyDate: IsoDate, at: IsoUtc): string {
+  return formatIstClock(utcToTimetableMinute(journeyDate, at)); // IST clock, from formatIstClock
+}
+
+/** Station name in title case when it comes in capitals, such as "Vadodara Jn" */
+export function displayName(name: string): string {
+  if (name !== name.toUpperCase()) {
+    return name;
+  }
+  return name
+    .toLowerCase()
+    .replace(
+      /(^|[\s(/-])(\p{L})/gu,
+      (_, lead: string, letter: string) => lead + letter.toUpperCase(),
+    );
+}
+
+/** Delay as a short mark: "+11" late, "−3" early, or "on time" */
+export function formatDelayMark(delayMin: number): string {
+  if (delayMin > 0) {
+    return `+${delayMin}`;
+  }
+  return delayMin < -1 ? `−${-delayMin}` : 'on time';
+}
+
 /** Delay in words */
 export function formatDelay(delayMin: number): string {
   if (delayMin > 0) {

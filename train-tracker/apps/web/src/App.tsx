@@ -56,7 +56,7 @@ function Frame({
         {chip !== null && (
           <div className="panel chip-sun">
             <b>{chip.phase}</b>
-            <span className="muted">at the train</span>
+            <span className="muted">where the train is</span>
             <span className="mono">{chip.clock} IST</span>
           </div>
         )}
@@ -133,21 +133,26 @@ function Live({
             now={now}
           />
           <div className="panel cam" role="toolbar" aria-label="Map view">
+            <div className="seg" role="group" aria-label="Camera">
+              <button
+                type="button"
+                aria-pressed={mode === 'follow'}
+                onClick={() => setMode('follow')}
+              >
+                Follow train
+              </button>
+              <button type="button" aria-pressed={mode === 'over'} onClick={() => setMode('over')}>
+                Whole route
+              </button>
+            </div>
             <button
               type="button"
-              aria-pressed={mode === 'follow'}
-              onClick={() => setMode('follow')}
-            >
-              Follow train
-            </button>
-            <button type="button" aria-pressed={mode === 'over'} onClick={() => setMode('over')}>
-              Whole route
-            </button>
-            <button
-              type="button"
-              aria-pressed={isTerrainOn}
+              role="switch"
+              className="switch"
+              aria-checked={isTerrainOn}
               onClick={() => setIsTerrainOn(!isTerrainOn)}
             >
+              <span className="knob" aria-hidden="true"></span>
               3D terrain
             </button>
           </div>

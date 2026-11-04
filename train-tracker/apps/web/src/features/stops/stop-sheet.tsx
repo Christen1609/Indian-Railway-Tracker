@@ -1,14 +1,19 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { IsoDate, Station, TimetableStop, Train, TrainState } from '@train-tracker/core/types';
+import { dayOffset, formatIstClock, utcToTimetableMinute } from '@train-tracker/core/time';
 import { alongKmOf, nextIndex } from '../map/geometry';
 import type { Track } from '../map/geometry';
 import {
-  formatJourneyClock,
+  delayTone,
+  displayName,
+  formatClock,
+  formatDelay,
+  formatDelayMark,
   formatJourneyDate,
+  formatJourneyTime,
   formatKm,
   formatPace,
-  formatTimetableMinute,
   formatWindow,
 } from '../../lib/format';
 import type { StopEvent } from '../../lib/rows';
@@ -26,14 +31,26 @@ type Props = {
 const SHEET_OFFSET_SHARE = 0.3;
 const PHONE_QUERY = '(max-width: 760px)';
 
-/** Scheduled arrival and departure as short lines */
-function scheduleLines(stop: TimetableStop): string[] {
-  const arr = stop.schedArrMin === null ? null : formatTimetableMinute(stop.schedArrMin);
-  const dep = stop.schedDepMin === null ? null : formatTimetableMinute(stop.schedDepMin);
-  return [
-    arr === null ? null : `Sched ${arr}`,
-    dep === null ? null : `${arr === null ? 'Sched' : 'dep'} ${dep}`,
-  ].filter((line) => line !== null);
+/** One timetable cell: a clock with a hidden word saying what it is */
+function Cell({
+  label,
+  clock,
+  className,
+}: {
+  label: string;
+  clock: string | null;
+  className: string;
+}) {
+  return (
+    <span className={className}>
+      {clock !== null && (
+        <>
+          <span className="sr-only">{label} </span>
+          {clock}
+        </>
+      )}
+    </span>
+  );
 }
 
 export const StopSheet = memo(function StopSheet({
@@ -60,7 +77,7 @@ export const StopSheet = memo(function StopSheet({
 
   const stopOf = new Map(stops.map((stop) => [stop.stationCode, stop]));
   const actual = new Map(events.map((event) => [`${event.stationCode}:${event.type}`, event.at]));
-  const nameOf = (code: string) => stations.get(code)?.name ?? code;
+  const nameOf = (code: string) => displayName(stations.get(code)?.name ?? code);
   const alongKm = alongKmOf(track, state.km);
   const nextIdx = nextIndex(track, alongKm); // route point just ahead, from nextIndex
   const first = stops[0];
@@ -120,6 +137,12 @@ export const StopSheet = memo(function StopSheet({
     const arrAt = actual.get(`${point.code}:ARR`);
     const depAt = actual.get(`${point.code}:DEP`);
     const doneAt = arrAt ?? depAt;
+    const schedMin = stop === undefined ? null : (stop.schedArrMin ?? stop.schedDepMin);
+    const day = schedMin === null ? 1 : dayOffset(schedMin); // journey day, from dayOffset
+    const delayMin =
+      doneAt === undefined || schedMin === null
+        ? null
+        : utcToTimetableMinute(journeyDate, doneAt) - schedMin; // minutes from midnight IST on day 1, from utcToTimetableMinute
     const className = [
       'row',
       stop === undefined ? 'pass' : 'halt',
@@ -130,34 +153,64 @@ export const StopSheet = memo(function StopSheet({
       <li key={point.code} className={className}>
         <i className="node" aria-hidden="true"></i>
         <div className="nm">
-          <span className="n">{point.name}</span>
+          <span className="n">{displayName(point.name)}</span>
           <span className="meta">
             <span className="code">{point.code}</span>
+            {day > 1 && <span className="day">day {day}</span>}
             {!isPast && (
               <span className="dist">{Math.max(1, Math.round(point.km - state.km))} km</span>
+            )}
+            {delayMin !== null && (
+              <span className={`dmark ${delayTone(delayMin)}`}>{formatDelayMark(delayMin)}</span>
             )}
           </span>
         </div>
         {stop !== undefined && (
           <div className="tm">
-            {doneAt !== undefined && <span>{formatJourneyClock(journeyDate, doneAt)}</span>}
-            {doneAt === undefined && isNext && state.window !== null && (
-              <span className="w">{formatWindow(journeyDate, state.window)}</span>
-            )}
-            {arrAt !== undefined && depAt !== undefined && (
-              <span className="dl">dep {formatJourneyClock(journeyDate, depAt)}</span>
-            )}
-            {scheduleLines(stop).map((line) => (
-              <span key={line} className="sch">
-                {line}
+            {doneAt === undefined && isNext && state.window !== null ? (
+              <span className="w">
+                <span className="sr-only">Expected </span>
+                {formatWindow(journeyDate, state.window)}
               </span>
-            ))}
+            ) : (
+              <>
+                <Cell
+                  className="act"
+                  label="Arrived"
+                  clock={arrAt === undefined ? null : formatJourneyTime(journeyDate, arrAt)}
+                />
+                <Cell
+                  className="act"
+                  label="Left"
+                  clock={depAt === undefined ? null : formatJourneyTime(journeyDate, depAt)}
+                />
+              </>
+            )}
+            <Cell
+              className="sch"
+              label="Due"
+              clock={stop.schedArrMin === null ? null : formatIstClock(stop.schedArrMin)}
+            />
+            <Cell
+              className="sch"
+              label="Leaves"
+              clock={stop.schedDepMin === null ? null : formatIstClock(stop.schedDepMin)}
+            />
           </div>
         )}
       </li>,
     );
   });
   flushHidden(last?.km ?? lastKm, false);
+  const arrivedAt = last === undefined ? undefined : actual.get(`${last.stationCode}:ARR`);
+  const summary = isArrived
+    ? [
+        arrivedAt === undefined ? 'Arrived' : `Arrived ${formatClock(arrivedAt)} IST`,
+        state.delayMin === null ? null : formatDelay(state.delayMin).toLowerCase(),
+      ]
+        .filter((part) => part !== null)
+        .join(', ')
+    : `${formatKm(toGoKm)} still to run, ${haltsLeft === 1 ? '1 halt' : `${haltsLeft} halts`} to come`;
 
   return (
     <aside className={`panel stops${isOpen ? ' open' : ' shut'}`} aria-label="Journey">
@@ -166,9 +219,12 @@ export const StopSheet = memo(function StopSheet({
           {first ? nameOf(first.stationCode) : ''} to {last ? nameOf(last.stationCode) : ''}
         </h2>
         <p className="muted">
-          {formatJourneyDate(journeyDate)}. {formatKm(toGoKm)} still to run,{' '}
-          {haltsLeft === 1 ? '1 halt' : `${haltsLeft} halts`} to come
+          {formatJourneyDate(journeyDate)}. {summary}
         </p>
+        <div className="cols" aria-hidden="true">
+          <span>arr</span>
+          <span>dep</span>
+        </div>
         <button
           type="button"
           className="sheet-btn"

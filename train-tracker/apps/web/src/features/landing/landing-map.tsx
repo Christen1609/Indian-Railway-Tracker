@@ -3,7 +3,8 @@ import { useEffect, useRef } from 'react';
 import { Map as MapLibreMap } from 'maplibre-gl';
 import { landingStyle } from '../map/map-style';
 
-const INDIA: [number, number] = [80, 22];
+/** Looking down from above Central Asia, so India sits just below the sign at the page's centre */
+const VIEW: [number, number] = [80, 52];
 const SPIN_DEG_PER_S = 4;
 const MS_PER_S = 1000;
 const HALF_TURN_DEG = 180;
@@ -43,7 +44,7 @@ function centredZoom(): number {
   const camera = height * CAMERA_HEIGHTS;
   const sin = Math.sin(Math.atan(radiusPx / camera));
   const globeRadius = (camera * sin) / (1 - sin);
-  const latScale = Math.cos((INDIA[1] * Math.PI) / HALF_TURN_DEG);
+  const latScale = Math.cos((VIEW[1] * Math.PI) / HALF_TURN_DEG);
   return Math.log2((2 * Math.PI * latScale * globeRadius) / GLOBE_CIRCUMFERENCE_PX);
 }
 
@@ -75,7 +76,7 @@ export function LandingMap() {
     const map = new MapLibreMap({
       container,
       style: landingStyle(scheme.matches),
-      center: INDIA,
+      center: VIEW,
       zoom,
       interactive: false,
       attributionControl: false,
@@ -83,7 +84,7 @@ export function LandingMap() {
     });
     let frameId = 0;
     let lastFrameAt: number | null = null;
-    let spinLng = INDIA[0];
+    let spinLng = VIEW[0];
     let followLng = 0;
     let followLat = 0;
     let targetLng = 0;
@@ -100,7 +101,7 @@ export function LandingMap() {
       map.jumpTo({
         center: [
           wrapLng(spinLng + followLng + dragLng),
-          clamp(INDIA[1] + followLat, -MAX_LAT_DEG, MAX_LAT_DEG),
+          clamp(VIEW[1] + followLat, -MAX_LAT_DEG, MAX_LAT_DEG),
         ],
       });
     };
@@ -122,10 +123,10 @@ export function LandingMap() {
       frameId = requestAnimationFrame(frame);
     };
 
-    /** Reset to India, then spin unless the visitor prefers reduced motion */
+    /** Reset to the view over India, then spin unless the visitor prefers reduced motion */
     const applyMotion = () => {
       cancelAnimationFrame(frameId);
-      spinLng = INDIA[0];
+      spinLng = VIEW[0];
       followLng = 0;
       followLat = 0;
       targetLng = 0;

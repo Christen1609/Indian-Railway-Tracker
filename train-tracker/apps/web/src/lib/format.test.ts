@@ -2,12 +2,15 @@ import type { TrainState } from '@train-tracker/core/types';
 import { describe, expect, it } from 'vitest';
 import {
   delayTone,
+  displayName,
   describeWhereabouts,
   formatAgo,
   formatClock,
   formatDelay,
+  formatDelayMark,
   formatJourneyClock,
   formatJourneyDate,
+  formatJourneyTime,
   formatKm,
   formatPace,
   formatTimetableMinute,
@@ -166,5 +169,33 @@ describe('describeWhereabouts', () => {
         paceText: '7% slower than the timetable',
       },
     });
+  });
+});
+
+describe('displayName', () => {
+  it.each([
+    ['capitals become title case', 'NEW DELHI', 'New Delhi'],
+    ['abbreviations follow the same rule', 'VADODARA JN', 'Vadodara Jn'],
+    ['names already in mixed case stay as they are', 'Mumbai Central', 'Mumbai Central'],
+    ['letters after a hyphen are capitalised', 'SAWAI MADHOPUR-JN', 'Sawai Madhopur-Jn'],
+  ])('%s', (_name, input, expected) => {
+    expect(displayName(input)).toBe(expected);
+  });
+});
+
+describe('formatDelayMark', () => {
+  it.each([
+    ['late shows a plus', 11, '+11'],
+    ['one minute early counts as on time', -1, 'on time'],
+    ['zero is on time', 0, 'on time'],
+    ['early shows a minus', -4, '−4'],
+  ])('%s', (_name, delay, expected) => {
+    expect(formatDelayMark(delay)).toBe(expected);
+  });
+});
+
+describe('formatJourneyTime', () => {
+  it('shows the IST clock without the day', () => {
+    expect(formatJourneyTime(JOURNEY_DATE, '2026-10-28T03:07:00.000Z')).toBe('08:37');
   });
 });

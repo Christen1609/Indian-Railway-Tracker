@@ -14,9 +14,11 @@ import { TRAIN_NAMES_HI } from '../map/route-12951';
 import {
   delayTone,
   describeWhereabouts,
+  displayName,
   formatAgo,
   formatClock,
   formatDelay,
+  formatJourneyDate,
   formatTimetableMinute,
   formatWindow,
 } from '../../lib/format';
@@ -44,7 +46,7 @@ const STATE_LABELS: Record<TrainStateKind, string> = {
 export function StatusCard({ train, stops, stations, state, track, journeyDate, now }: Props) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const nameHi = TRAIN_NAMES_HI[train.number];
-  const nameOf = (code: string) => stations.get(code)?.name ?? code;
+  const nameOf = (code: string) => displayName(stations.get(code)?.name ?? code);
   const nextIdx = nextIndex(track, alongKmOf(track, state.km)); // route point just ahead, from nextIndex
   const before = track.points[nextIdx - 1];
   const after = track.points[nextIdx];
@@ -52,7 +54,9 @@ export function StatusCard({ train, stops, stations, state, track, journeyDate, 
   const whereabouts = describeWhereabouts(
     state,
     nameOf(destination?.stationCode ?? ''),
-    before !== undefined && after !== undefined ? `Between ${before.name} and ${after.name}` : null,
+    before !== undefined && after !== undefined
+      ? `Between ${displayName(before.name)} and ${displayName(after.name)}`
+      : null,
   ); // lead and km text, from describeWhereabouts
   useEffect(() => {
     if (hasMovedPages()) {
@@ -79,7 +83,9 @@ export function StatusCard({ train, stops, stations, state, track, journeyDate, 
       <div className="status" aria-live="polite">
         <span className={`pill ${tone}`}>{pillText}</span>
         <span className="muted">
-          Updated {formatClock(state.updatedAt)} IST, {formatAgo(state.updatedAt, now)}
+          {state.state === 'arrived'
+            ? `Journey of ${formatJourneyDate(journeyDate)}`
+            : `Updated ${formatClock(state.updatedAt)} IST, ${formatAgo(state.updatedAt, now)}`}
         </span>
       </div>
       {state.nextStation !== null && (
