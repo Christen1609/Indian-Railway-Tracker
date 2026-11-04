@@ -7,11 +7,13 @@ import { readConfig } from './config.js';
 import { callsThisMonth } from './db/journey-data.js';
 import { sweepJourneys } from './jobs/sweep.js';
 import { log } from './log.js';
+import { settleRequests, watchList } from './scheduler/timetable.js';
 import { waitBeforeNext, watchRound } from './scheduler/watch.js';
 import type { Run } from './scheduler/watch.js';
 
 const RAILRADAR: SourceId = 'railradar';
 const TRAIN_NUMBER = /^\d{4,5}$/;
+const IDLE_MIN = 60;
 
 /** Waits a number of milliseconds */
 function wait(ms: number): Promise<void> {
@@ -20,16 +22,10 @@ function wait(ms: number): Promise<void> {
   });
 }
 
-/** Watches the trains named on the command line until the time limit, then sweeps and exits */
+/** Watches the trains named on the command line and the trains the website asked for until the time limit, then sweeps and exits */
 async function main(): Promise<void> {
   const config = readConfig(process.env); // the validated config, from readConfig
-  const watching = process.argv.slice(2).filter((one) => TRAIN_NUMBER.test(one));
-
-  if (watching.length === 0) {
-    throw new Error(
-      'Nothing to watch. Give one or more train numbers, as in: pnpm --filter @train-tracker/ingest start 12951',
-    );
-  }
+  const named = process.argv.slice(2).filter((one) => TRAIN_NUMBER.test(one));
 
   const run: Run = { config, watchingSince: new Date().toISOString(), holds: new Map() };
   // when this run must end, from plusMinutes
@@ -40,7 +36,7 @@ async function main(): Promise<void> {
   const budget = quotaCheck({ ...config.quota, spentThisMonth });
 
   log('info', 'worker_started', {
-    watching: watching.join(','),
+    named: named.join(','),
     endsAt,
     spentThisMonth,
     left: budget.left,
@@ -48,8 +44,12 @@ async function main(): Promise<void> {
 
   for (;;) {
     const now = new Date().toISOString();
-    const soonest = await watchRound(watching, run); // when the next train is due, from watchRound
-    const sleeping = waitBeforeNext(soonest ?? now, new Date().toISOString(), endsAt); // how long to wait, from waitBeforeNext
+    const retryAt = await settleRequests(config, now); // when a waiting request may be tried again, from settleRequests
+    const watching = await watchList(named, config, now); // the trains to follow this round, from watchList
+    const due = await watchRound(watching, run); // when the next train is due, from watchRound
+    const soonest = [due, retryAt].filter((one): one is string => one !== null).sort()[0];
+    const idleUntil = watching.length === 0 ? plusMinutes(now, IDLE_MIN) : now;
+    const sleeping = waitBeforeNext(soonest ?? idleUntil, new Date().toISOString(), endsAt); // how long to wait, from waitBeforeNext
 
     if (sleeping === null) {
       log('info', 'worker_time_up', { watching: watching.join(','), endsAt });
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    log('debug', 'waiting', { ms: sleeping, until: soonest });
+    log('debug', 'waiting', { ms: sleeping, until: soonest ?? null });
     await wait(sleeping);
   }
 }

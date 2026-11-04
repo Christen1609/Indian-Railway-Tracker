@@ -413,6 +413,12 @@ Known weak spots:
 - The limits live in a pure gate in `packages/core`. Its state is read from `raw_fetches`, so it needs no new table.
 - Kill-switches: `SCRAPE_ENABLED`, a per-source enable list, the blocked state and a daily scrape cap.
 
+## Timetables for any train
+
+A visitor who opens a train calls `request_train`, which adds a `pending` row to `watch_requests` (the same train at most once every 10 minutes; a `failed` row is retried after 6 hours). Each worker round answers every pending row. If the train already has `timetable_stops` the row becomes `ready`. If not, the worker fetches the Goibibo running status page once, through the same robots, gate and health checks as any scrape, and reads `scheduledIntermediateApiResponse` from its `__NEXT_DATA__`. That block lists every halt with its scheduled times, day number, distance and coordinates, and `DaysOfRun`. A page with no timetable, or a 404, marks the row `failed` and does not count against the source's health. Station codes the `stations` table lacks are added from the page (existing rows are never changed), and `trains.runs_on` is set from `DaysOfRun` (Mon = 1 ... Sun = 64).
+
+The scheduler does not read `runs_on` yet: it follows every train as if it ran daily.
+
 ## Where the worker runs
 
 The worker runs on GitHub Actions (`.github/workflows/worker.yml`), so it doesn't depend on the owner's PC. A probe from a GitHub runner on 2 Nov got real pages from all five sites. The repo is public, so standard runners cost nothing.
@@ -421,6 +427,7 @@ The worker runs on GitHub Actions (`.github/workflows/worker.yml`), so it doesn'
 - It exits cleanly at `WORKER_MAX_MINUTES=330`, under the 6-hour job limit, and sweeps on the way out. An hourly scheduled run waits queued and picks up from Supabase.
 - A keep-alive job re-enables the workflow on every trigger, so the 60-day inactivity shutoff can't stop it.
 - With `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` or `RAILRADAR_API_KEY` missing, it logs "worker skipped: secrets not set" and exits 0.
-- The trains to watch come from the `WATCH_TRAINS` repository variable, default `12951`.
+- The trains to watch are the ones named on the command line (the `WATCH_TRAINS` repository variable, default `12951`, which may be empty) plus the trains visitors asked for: `watch_requests` rows that are `ready` and were requested in the last 3 days, the 25 newest at most. The list is read again every round.
+- A sleep never runs past 2 minutes, so a new request is picked up within that. The re-read is a query on our own database. Feed checks still happen only when an arrival window is open, so this adds no feed calls. With nothing to watch, the worker stays alive to its time limit and keeps looking for requests.
 
 It can still run on any machine with `pnpm --filter @train-tracker/ingest start 12951`. Leave `WORKER_MAX_MINUTES` unset to run with no time limit.

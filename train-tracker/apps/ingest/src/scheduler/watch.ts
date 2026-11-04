@@ -10,7 +10,7 @@ import { log } from '../log.js';
 import { checkJourney } from './check-journey.js';
 
 const WAIT_FLOOR_MS = 20_000;
-const WAIT_CEILING_MS = 300_000;
+const WAIT_CEILING_MS = 120_000;
 
 type Hold = { failures: number; until: IsoUtc };
 

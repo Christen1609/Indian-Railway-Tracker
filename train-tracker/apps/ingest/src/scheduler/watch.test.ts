@@ -169,9 +169,9 @@ describe('waitBeforeNext', () => {
     expect(waitBeforeNext(at(2), NOW, null)).toBe(2 * MINUTE);
   });
 
-  it('waits at least 20 seconds and at most 5 minutes', () => {
+  it('waits at least 20 seconds and at most 2 minutes', () => {
     expect(waitBeforeNext(NOW, NOW, null)).toBe(20_000);
-    expect(waitBeforeNext(at(120), NOW, null)).toBe(5 * MINUTE);
+    expect(waitBeforeNext(at(120), NOW, null)).toBe(2 * MINUTE);
   });
 
   it('never waits past the end of the run', () => {
