@@ -225,6 +225,14 @@ timetable_stops (
   primary key (train_number, seq)
 )
 
+watch_requests (
+  train_number     text primary key references trains(number),
+  requested_at     timestamptz,        -- last request, moved at most every 10 minutes
+  timetable_status text,               -- 'pending' | 'ready' | 'failed'
+  timetable_error  text,
+  updated_at       timestamptz
+)                                      -- written only by request_train() and the worker. Realtime enabled, like timetable_stops
+
 section_caps (
   train_number  text references trains(number),
   from_seq      smallint,             -- section starts at this stop
