@@ -4,7 +4,8 @@ import { assert } from '@train-tracker/core/types';
 import type { Station, TimetableStop } from '@train-tracker/core/types';
 import { mixHex } from './lighting';
 import type { Sun } from './lighting';
-import { HINDI_NAMES, MAJOR_CODES } from './route-12951';
+import { NO_DETAIL } from './route';
+import type { RouteDetail } from './route';
 import type { RoutePoint } from './route-12951';
 
 export type Coord = { lon: number; lat: number };
@@ -180,7 +181,8 @@ function convert(anchors: Anchor[], from: keyof Anchor, to: keyof Anchor, value:
 export function buildTrack(
   route: RoutePoint[],
   stops: TimetableStop[],
-  stations: Map<string, Station>,
+  stations: ReadonlyMap<string, Station>,
+  detail: RouteDetail = NO_DETAIL,
 ): Track | null {
   const alongKms = cumulativeKm(route); // distance along the route to each point, from cumulativeKm
   const anchors = stops.flatMap((stop) => {
@@ -197,9 +199,9 @@ export function buildTrack(
     return {
       ...point,
       name: station?.name ?? point.name,
-      nameHi: station?.nameHi ?? HINDI_NAMES[point.code] ?? '',
+      nameHi: station?.nameHi ?? detail.hindiNames[point.code] ?? '',
       isStop: stopCodes.has(point.code),
-      isMajor: MAJOR_CODES.has(point.code),
+      isMajor: detail.majorCodes.has(point.code),
       alongKm,
       km: convert(anchors, 'alongKm', 'km', alongKm),
     };

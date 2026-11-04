@@ -6,6 +6,7 @@ import {
   TimetableStopRow,
   TrainRow,
   TrainStateRow,
+  WatchRequestRow,
 } from './rows';
 
 const TRAIN = {
@@ -158,5 +159,26 @@ describe('row mappers', () => {
     ],
   ])('rejects %s', (_name, schema, row) => {
     expect(schema.safeParse(row).success).toBe(false);
+  });
+});
+
+describe('WatchRequestRow', () => {
+  const ROW = {
+    train_number: '12951',
+    requested_at: '2026-11-04T10:00:00+00:00',
+    timetable_status: 'pending',
+    timetable_error: null,
+    updated_at: '2026-11-04T10:00:00+00:00',
+  };
+
+  it('keeps the train number and status, dropping the error text', () => {
+    expect(WatchRequestRow.parse({ ...ROW, timetable_error: 'x' })).toEqual({
+      trainNumber: '12951',
+      status: 'pending',
+    });
+  });
+
+  it('rejects a status the app does not know', () => {
+    expect(WatchRequestRow.safeParse({ ...ROW, timetable_status: 'done' }).success).toBe(false);
   });
 });

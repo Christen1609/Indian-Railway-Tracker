@@ -151,3 +151,15 @@ export const StopEventRow = z
     at: Utc,
   })
   .transform((row): StopEvent => ({ stationCode: row.station_code, type: row.type, at: row.at }));
+
+export type WatchStatus = 'pending' | 'ready' | 'failed';
+
+export const WatchRequestRow = z
+  .object({
+    train_number: z.string().min(1),
+    timetable_status: z.enum(['pending', 'ready', 'failed']),
+  })
+  .transform((row): { trainNumber: string; status: WatchStatus } => ({
+    trainNumber: row.train_number,
+    status: row.timetable_status,
+  }));

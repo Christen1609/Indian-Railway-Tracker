@@ -1,6 +1,6 @@
-// Features: journey load, tracked trains load, realtime subscription, clock tick
+// Features: journey load, train search, timetable request, realtime subscription, clock tick
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import type {
   IsoUtc,
@@ -10,6 +10,17 @@ import type {
   Train,
   TrainState,
 } from '@train-tracker/core/types';
+import {
+  cleanQuery,
+  planSearch,
+  rankTrains,
+  SEARCH_DEBOUNCE_MS,
+  SUGGESTION_LIMIT,
+  toCandidates,
+} from '../features/search/search';
+import type { Candidate } from '../features/search/search';
+import type { WatchStatus } from './rows';
+import type { Watch } from '../features/status/page-state';
 import { supabase } from './supabase';
 import {
   JourneyRow,
@@ -18,6 +29,7 @@ import {
   TimetableStopRow,
   TrainRow,
   TrainStateRow,
+  WatchRequestRow,
 } from './rows';
 import type { StopEvent } from './rows';
 
@@ -36,8 +48,9 @@ export type JourneyView = {
 export type Load =
   { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; view: JourneyView };
 
-export type TrackedLoad =
-  { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; trains: Train[] };
+export type SearchResult = { candidates: Candidate[]; isSettled: boolean };
+
+export type Tracked = { load: Load; watch: Watch };
 
 type LiveView = Pick<JourneyView, 'state' | 'events'>;
 
@@ -98,7 +111,9 @@ async function loadJourney(trainNumber: string): Promise<JourneyView> {
   ]);
   const train = trains[0];
   if (train === undefined) {
-    throw new Error(`No train numbered ${trainNumber} is in the timetable.`);
+    throw new Error(
+      `We don’t know a train numbered ${trainNumber}. Check the number and try again.`,
+    );
   }
   const journey = journeys[0] ?? null;
   const [stations, live] = await Promise.all([
@@ -129,14 +144,104 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : LOAD_FAILED;
 }
 
-/** The latest journey of a train, kept current by Realtime */
-export function useLiveJourney(trainNumber: string): Load {
+/** The status in a request_train reply, whether it is one row or a list of one */
+function statusOfReply(data: unknown): WatchStatus | null {
+  const parsed = z.union([WatchRequestRow, z.array(WatchRequestRow)]).safeParse(data);
+  if (!parsed.success) {
+    return null;
+  }
+  const row = Array.isArray(parsed.data) ? parsed.data[0] : parsed.data;
+  return row?.status ?? null;
+}
+
+/** Asks for a train's timetable once, then follows the request and new journeys until the page closes */
+function useTimetableRequest(
+  trainNumber: string,
+  isKnown: boolean,
+  hasTimetable: boolean,
+  reload: () => void,
+): Watch {
+  const [watch, setWatch] = useState<{ trainNumber: string; status: Watch } | null>(null);
+  const hasTimetableRef = useRef(hasTimetable);
+  hasTimetableRef.current = hasTimetable;
+
+  useEffect(() => {
+    if (!isKnown) {
+      return;
+    }
+    let isCurrent = true;
+
+    /** Records a status, reloading the journey when the timetable has just become ready */
+    const update = (status: Watch) => {
+      if (!isCurrent) {
+        return;
+      }
+      setWatch({ trainNumber, status });
+      if (status === 'ready' && !hasTimetableRef.current) {
+        reload();
+      }
+    };
+
+    const channel = supabase
+      .channel(`watch-${trainNumber}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'watch_requests',
+          filter: `train_number=eq.${trainNumber}`,
+        },
+        (payload) => {
+          const parsed = WatchRequestRow.safeParse(payload.new);
+          if (parsed.success) {
+            update(parsed.data.status);
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'journeys',
+          filter: `train_number=eq.${trainNumber}`,
+        },
+        () => {
+          if (isCurrent) {
+            reload();
+          }
+        },
+      )
+      .subscribe();
+    supabase.rpc('request_train', { p_train_number: trainNumber }).then(
+      ({ data, error }) => update(error === null ? statusOfReply(data) : 'unavailable'),
+      () => update('unavailable'),
+    );
+
+    return () => {
+      isCurrent = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [trainNumber, isKnown, reload]);
+
+  return watch?.trainNumber === trainNumber ? watch.status : null;
+}
+
+/** The latest journey of a train, kept current by Realtime, with the state of its timetable request */
+export function useLiveJourney(trainNumber: string): Tracked {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  const [reloadCount, setReloadCount] = useState(0);
   const journeyId = load.kind === 'ready' ? load.view.journey?.id : undefined;
+  const reload = useCallback(() => setReloadCount((count) => count + 1), []);
 
   useEffect(() => {
     let isCurrent = true;
-    setLoad({ kind: 'loading' });
+    setLoad((current) =>
+      current.kind === 'ready' && current.view.train.number === trainNumber
+        ? current
+        : { kind: 'loading' },
+    );
     loadJourney(trainNumber).then(
       (view) => {
         if (isCurrent) {
@@ -152,7 +257,11 @@ export function useLiveJourney(trainNumber: string): Load {
     return () => {
       isCurrent = false;
     };
-  }, [trainNumber]);
+  }, [trainNumber, reloadCount]);
+
+  const isKnown = load.kind === 'ready' && load.view.train.number === trainNumber;
+  const hasTimetable = load.kind === 'ready' && load.view.stops.length > 0;
+  const watch = useTimetableRequest(trainNumber, isKnown, hasTimetable, reload);
 
   useEffect(() => {
     if (journeyId === undefined) {
@@ -211,37 +320,43 @@ export function useLiveJourney(trainNumber: string): Load {
     };
   }, [journeyId]);
 
-  return load;
+  return { load, watch };
 }
 
-/** The trains in the timetable among the given numbers */
-export function useTrackedTrains(trainNumbers: readonly string[]): TrackedLoad {
-  const [load, setLoad] = useState<TrackedLoad>({ kind: 'loading' });
+/** Suggestions for the typed text, fetched once typing pauses */
+export function useTrainSearch(query: string): SearchResult {
+  const [result, setResult] = useState<{ query: string; candidates: Candidate[] } | null>(null);
+  const text = cleanQuery(query);
 
   useEffect(() => {
+    const plan = planSearch(text);
+    if (plan === null) {
+      return;
+    }
     let isCurrent = true;
-    readRows(
-      TrainRow,
-      supabase.from('trains').select('*').in('number', trainNumbers),
-      'the trains',
-    ).then(
-      (trains) => {
-        if (isCurrent) {
-          setLoad({ kind: 'ready', trains });
-        }
-      },
-      (error: unknown) => {
-        if (isCurrent) {
-          setLoad({ kind: 'error', message: describeError(error) });
-        }
-      },
-    );
+    const timer = setTimeout(() => {
+      const column = supabase.from('trains').select('*');
+      const matching =
+        plan.column === 'number'
+          ? column.like('number', plan.pattern).order('number')
+          : column.ilike('name', plan.pattern).order('name');
+      readRows(TrainRow, matching.limit(SUGGESTION_LIMIT), 'the trains').then(
+        (trains) => {
+          if (isCurrent) {
+            setResult({ query: text, candidates: rankTrains(text, toCandidates(trains)) });
+          }
+        },
+        (error: unknown) => console.warn(describeError(error)),
+      );
+    }, SEARCH_DEBOUNCE_MS);
     return () => {
       isCurrent = false;
+      clearTimeout(timer);
     };
-  }, [trainNumbers]);
+  }, [text]);
 
-  return load;
+  const isSettled = text === '' || result?.query === text;
+  return { candidates: text === '' || result === null ? [] : result.candidates, isSettled };
 }
 
 /** The current instant, refreshed every second for relative text only */

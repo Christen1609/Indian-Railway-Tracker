@@ -1136,22 +1136,6 @@ input:focus-visible {
 .sf input {
   font-size: 16px;
 }
-.sf-suggest {
-  display: block;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: 600 15px var(--f-body);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.sf-suggest:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
 a:focus-visible {
   outline: 2px solid var(--fg);
   outline-offset: 2px;
@@ -1470,4 +1454,19 @@ a.brand {
   .flow:active .flow-in {
     transform: translateX(-48px);
   }
+}
+
+.timetable-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  font-size: 13px;
+}
+.timetable-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
 }

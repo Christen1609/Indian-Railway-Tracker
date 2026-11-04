@@ -5,23 +5,21 @@ import { Brand } from './features/brand/brand';
 import { Landing } from './features/landing/landing';
 import { alongKmOf, buildTrack, pointAt } from './features/map/geometry';
 import { isDarkPanels, sunAt, sunPhase } from './features/map/lighting';
-import { ROUTES } from './features/map/route-12951';
+import { routeFor } from './features/map/route';
 import type { ViewMode } from './features/map/train-map';
-import { toCandidates, trackedSummary } from './features/search/search';
 import { SearchField } from './features/search/search-field';
+import { pageMessage, pageStateOf } from './features/status/page-state';
 import { StatusCard } from './features/status/status-card';
 import { StopSheet } from './features/stops/stop-sheet';
+import { TimetableList } from './features/stops/timetable-list';
 import { formatClock } from './lib/format';
-import { useLiveJourney, useNow, useTrackedTrains } from './lib/live';
+import { useLiveJourney, useNow } from './lib/live';
 import type { JourneyView } from './lib/live';
 import { useTrainParam } from './lib/navigation';
 
 const TrainMap = lazy(() =>
   import('./features/map/train-map').then((module) => ({ default: module.TrainMap })),
 );
-
-const TRACKED_NUMBERS = Object.keys(ROUTES);
-const TRACKED_CANDIDATES = TRACKED_NUMBERS.map((number) => ({ number, name: '' }));
 
 type Chip = { phase: string; clock: string };
 
@@ -34,18 +32,11 @@ function Frame({
   trainNumber: string;
   children: ReactNode;
 }) {
-  const load = useTrackedTrains(TRACKED_NUMBERS);
-  const candidates = useMemo(
-    () => (load.kind === 'ready' ? toCandidates(load.trains) : TRACKED_CANDIDATES),
-    [load],
-  );
-
   return (
     <div className="ui">
       <div className="bar">
         <Brand />
         <SearchField
-          candidates={candidates}
           inputId="train-search"
           initial={trainNumber}
           ariaLabel="Train number or name"
@@ -66,12 +57,21 @@ function Frame({
   );
 }
 
-function Notice({ trainNumber, children }: { trainNumber: string; children: ReactNode }) {
+function Notice({
+  trainNumber,
+  children,
+  extra,
+}: {
+  trainNumber: string;
+  children: ReactNode;
+  extra?: ReactNode;
+}) {
   return (
     <Frame chip={null} trainNumber={trainNumber}>
-      <p className="panel notice" role="status">
-        {children}
-      </p>
+      <div className="panel notice">
+        <p role="status">{children}</p>
+        {extra}
+      </div>
     </Frame>
   );
 }
@@ -88,11 +88,10 @@ function Live({
   const now = useNow();
   const [mode, setMode] = useState<ViewMode>('follow');
   const [isTerrainOn, setIsTerrainOn] = useState(true);
-  const route = ROUTES[view.train.number];
-  const track = useMemo(
-    () => (route === undefined ? null : buildTrack(route, view.stops, view.stations)),
-    [route, view.stops, view.stations],
-  );
+  const track = useMemo(() => {
+    const route = routeFor(view.train.number, view.stops, view.stations); // route points and names, from routeFor
+    return buildTrack(route.points, view.stops, view.stations, route.detail);
+  }, [view.train.number, view.stops, view.stations]);
   const spot = track === null ? null : pointAt(track, alongKmOf(track, state.km));
   const sun = spot === null ? null : sunAt(now, spot.lon, spot.lat);
   const isDark = sun !== null && isDarkPanels(sun);
@@ -102,7 +101,11 @@ function Live({
   }, [isDark]);
 
   if (track === null || sun === null) {
-    return <Notice trainNumber={view.train.number}>{trackedSummary(TRACKED_CANDIDATES)}</Notice>;
+    return (
+      <Notice trainNumber={view.train.number}>
+        We can’t draw a route for {view.train.name} yet.
+      </Notice>
+    );
   }
   return (
     <>
@@ -193,7 +196,7 @@ function Live({
 
 /** The 3D view of one train, or why it cannot be shown */
 function TrainView({ trainNumber }: { trainNumber: string }) {
-  const load = useLiveJourney(trainNumber);
+  const { load, watch } = useLiveJourney(trainNumber);
   if (load.kind === 'loading') {
     return <Notice trainNumber={trainNumber}>Loading train {trainNumber}.</Notice>;
   }
@@ -201,21 +204,25 @@ function TrainView({ trainNumber }: { trainNumber: string }) {
     return <Notice trainNumber={trainNumber}>{load.message}</Notice>;
   }
   const { view } = load;
-  if (view.journey === null) {
-    return (
-      <Notice trainNumber={trainNumber}>
-        No journey is recorded for {view.train.number} {view.train.name} yet.
-      </Notice>
-    );
+  const page = pageStateOf({
+    stopCount: view.stops.length,
+    hasJourney: view.journey !== null,
+    hasState: view.state !== null,
+    watch,
+  }); // which page this train gets, from pageStateOf
+  if (page === 'live' && view.journey !== null && view.state !== null) {
+    return <Live view={view} journey={view.journey} state={view.state} />;
   }
-  if (view.state === null) {
-    return (
-      <Notice trainNumber={trainNumber}>
-        No position is recorded for {view.train.number} {view.train.name} yet.
-      </Notice>
-    );
-  }
-  return <Live view={view} journey={view.journey} state={view.state} />;
+  return (
+    <Notice
+      trainNumber={trainNumber}
+      extra={
+        page === 'watching' ? <TimetableList stops={view.stops} stations={view.stations} /> : null
+      }
+    >
+      {pageMessage(page, `${view.train.number} ${view.train.name}`)}
+    </Notice>
+  );
 }
 
 export function App() {

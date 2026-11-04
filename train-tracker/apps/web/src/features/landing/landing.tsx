@@ -1,27 +1,19 @@
-import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Brand } from '../brand/brand';
-import { ROUTES } from '../map/route-12951';
-import { toCandidates } from '../search/search';
 import { SearchField } from '../search/search-field';
 import { formatClock } from '../../lib/format';
-import { useNow, useTrackedTrains } from '../../lib/live';
+import { useNow } from '../../lib/live';
 import { hasMovedPages } from '../../lib/navigation';
 
 const LandingMap = lazy(() =>
   import('./landing-map').then((module) => ({ default: module.LandingMap })),
 );
 
-const TRACKED_NUMBERS = Object.keys(ROUTES);
 const SEARCH_ID = 'train-search';
 
 export function Landing() {
-  const load = useTrackedTrains(TRACKED_NUMBERS);
   const now = useNow();
   const inputRef = useRef<HTMLInputElement>(null);
-  const candidates = useMemo(
-    () => (load.kind === 'ready' ? toCandidates(load.trains) : []),
-    [load],
-  );
   useEffect(() => {
     delete document.documentElement.dataset.theme;
     if (hasMovedPages()) {
@@ -46,12 +38,7 @@ export function Landing() {
                 Which train?
               </label>
             </h1>
-            <SearchField
-              candidates={candidates}
-              inputId={SEARCH_ID}
-              formClass="sign-form"
-              inputRef={inputRef}
-            />
+            <SearchField inputId={SEARCH_ID} formClass="sign-form" inputRef={inputRef} />
             <p className="sign-clock">
               <span className="mono">IST {formatClock(now)}</span>
             </p>
@@ -60,7 +47,6 @@ export function Landing() {
               <i></i>
             </div>
           </section>
-          {load.kind === 'error' && <p role="status">{load.message}</p>}
           <p className="landing-attrib">
             Imagery{' '}
             <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">

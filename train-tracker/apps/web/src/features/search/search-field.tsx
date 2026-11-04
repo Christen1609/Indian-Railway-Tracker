@@ -1,12 +1,12 @@
-import { useId, useMemo, useState } from 'react';
+import { useId, useState } from 'react';
 import type { FormEvent, KeyboardEvent, Ref } from 'react';
+import { useTrainSearch } from '../../lib/live';
 import { navigate, trainSearch } from '../../lib/navigation';
 import { FlowButton } from './flow-button';
-import { matchTrains, nextActiveIndex, noMatchMessage } from './search';
+import { nextActiveIndex, noMatchMessage } from './search';
 import type { Candidate } from './search';
 
 type Props = {
-  candidates: Candidate[];
   inputId: string;
   initial?: string;
   ariaLabel?: string;
@@ -17,13 +17,7 @@ type Props = {
 
 const EMPTY_MESSAGE = 'Type a train number or name.';
 
-/** Label for a suggestion */
-function optionText(candidate: Candidate): string {
-  return candidate.name === '' ? candidate.number : `${candidate.number} ${candidate.name}`;
-}
-
 export function SearchField({
-  candidates,
   inputId,
   initial = '',
   ariaLabel,
@@ -37,10 +31,10 @@ export function SearchField({
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [submitMessage, setSubmitMessage] = useState('');
-  const matches = useMemo(() => matchTrains(value, candidates), [value, candidates]); // trains matching the text, from matchTrains
+  const { candidates: matches, isSettled } = useTrainSearch(value); // suggestions for the text, from useTrainSearch
   const isListShown = isOpen && matches.length > 0;
-  const hasNoMatch = value.trim() !== '' && matches.length === 0;
-  const message = hasNoMatch ? noMatchMessage(value, candidates) : submitMessage;
+  const hasNoMatch = value.trim() !== '' && isSettled && matches.length === 0;
+  const message = hasNoMatch ? noMatchMessage(value) : submitMessage;
 
   /** Open a train's page */
   function open(candidate: Candidate) {
@@ -51,9 +45,14 @@ export function SearchField({
   /** Open the highlighted or only match, or say why not */
   function submit(event: FormEvent) {
     event.preventDefault();
-    const chosen = matches[activeIndex] ?? (matches.length === 1 ? matches[0] : undefined);
+    const settled = isSettled ? matches : [];
+    const chosen = settled[activeIndex] ?? (settled.length === 1 ? settled[0] : undefined);
     if (chosen !== undefined) {
       open(chosen);
+      return;
+    }
+    if (!isSettled && /^d{4,5}$/.test(value.trim())) {
+      open({ number: value.trim(), name: '' });
       return;
     }
     if (value.trim() === '') {
@@ -140,17 +139,6 @@ export function SearchField({
       </ul>
       <div className="search-msg" id={messageId} role="status" aria-live="polite">
         {message}
-        {hasNoMatch &&
-          candidates.map((candidate) => (
-            <button
-              key={candidate.number}
-              type="button"
-              className="sf-suggest"
-              onClick={() => open(candidate)}
-            >
-              Track {optionText(candidate)}
-            </button>
-          ))}
       </div>
     </div>
   );
