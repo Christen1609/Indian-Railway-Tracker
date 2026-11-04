@@ -14,6 +14,7 @@ import {
   trainFeatures,
 } from './geometry';
 import type { Track } from './geometry';
+import { DETAIL_12951 } from './route';
 import { ROUTE_12951 } from './route-12951';
 
 const STOPS: TimetableStop[] = [
@@ -34,7 +35,7 @@ const STOPS: TimetableStop[] = [
   km: Number(km),
 }));
 
-const built = buildTrack(ROUTE_12951, STOPS, new Map());
+const built = buildTrack(ROUTE_12951, STOPS, new Map(), DETAIL_12951);
 if (built === null) {
   throw new Error('the 12951 route should build into a track');
 }
