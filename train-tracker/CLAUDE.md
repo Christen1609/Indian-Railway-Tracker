@@ -77,6 +77,7 @@ pnpm --filter @train-tracker/refdata load   # stations, trains and the 12951 tim
 pnpm --filter @train-tracker/web dev        # web app with hot reload
 pnpm --filter @train-tracker/web build      # type check, then static build
 pnpm --filter @train-tracker/web preview    # serve the static build
+pnpm --filter @train-tracker/web e2e        # browser tests against the live site (SITE_URL=... for another)
 pnpm --filter @train-tracker/ingest start 12951   # watch trains; arguments are train numbers
 pnpm --filter @train-tracker/ingest retention     # delete finished journeys' data
 ```
