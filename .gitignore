@@ -21,3 +21,5 @@ dist/
 
 # Local-only notes holding live secrets. Never committed.
 *.local.md
+train-tracker/apps/web/test-results/
+train-tracker/apps/web/playwright-report/

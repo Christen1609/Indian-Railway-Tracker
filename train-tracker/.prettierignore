@@ -6,3 +6,5 @@ pnpm-lock.yaml
 
 .cache/
 supabase/.temp/
+test-results/
+playwright-report/
