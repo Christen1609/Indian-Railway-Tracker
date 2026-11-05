@@ -95,7 +95,7 @@ describe('scrapeStateQueries', () => {
   });
 
   it('counts from midnight IST, which is 18:30 UTC the evening before', () => {
-    expect(queries.today).toContain('fetched_at=gte.2026-11-01T18:30:00.000Z');
+    expect(queries.today).toContain('fetched_at=gte.2026-11-01T18%3A30%3A00.000Z');
   });
 });
 
@@ -127,9 +127,14 @@ describe('triedQuery', () => {
     expect(query).toContain(
       'source=in.(goibibo_scrape,confirmtkt_scrape,travelkhana_scrape,railyatri_scrape,railmitra_scrape)',
     );
-    expect(query).toContain('fetched_at=gte.2026-10-30T04:40:00.000Z');
+    expect(query).toContain('fetched_at=gte.2026-10-30T04%3A40%3A00.000Z');
     expect(query).toContain('order=fetched_at.asc,id.asc');
     expect(query).not.toContain('railradar');
+  });
+
+  it('encodes a database timestamp with an offset, so its plus sign is not read as a space', () => {
+    const fromDb = triedQuery('j1', '2026-11-04T11:53:09.193+00:00');
+    expect(fromDb).toContain('fetched_at=gte.2026-11-04T11%3A53%3A09.193%2B00%3A00');
   });
 });
 

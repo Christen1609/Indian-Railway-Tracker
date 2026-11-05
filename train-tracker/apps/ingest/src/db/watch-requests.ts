@@ -24,7 +24,7 @@ export async function requestedSince(
   limit: number,
   config: DbConfig,
 ): Promise<string[]> {
-  const query = `watch_requests?timetable_status=eq.ready&requested_at=gte.${since}&select=train_number&order=requested_at.desc&limit=${limit}`;
+  const query = `watch_requests?timetable_status=eq.ready&requested_at=gte.${encodeURIComponent(since)}&select=train_number&order=requested_at.desc&limit=${limit}`;
   return TrainRows.parse(await readRows(query, config)).map((row) => row.train_number); // rows, from readRows
 }
 
