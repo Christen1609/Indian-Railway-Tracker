@@ -59,7 +59,7 @@ describe('pendingRequests and requestedSince', () => {
     expect(await requestedSince(NOW, 25, CONFIG)).toEqual(['11077', '12627']);
     const url = String(fetchMock.mock.calls[0]?.[0]);
     expect(url).toContain('timetable_status=eq.ready');
-    expect(url).toContain(`requested_at=gte.${NOW}`);
+    expect(url).toContain(`requested_at=gte.${encodeURIComponent(NOW)}`);
     expect(url).toContain('order=requested_at.desc&limit=25');
   });
 });

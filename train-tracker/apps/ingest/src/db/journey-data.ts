@@ -233,7 +233,10 @@ export async function callsThisMonth(
   config: DbConfig,
 ): Promise<number> {
   const since = istMonthStart(now); // the start of the IST month, from istMonthStart
-  return countRows(`raw_fetches?source=eq.${source}&fetched_at=gte.${since}`, config); // the count, from countRows
+  return countRows(
+    `raw_fetches?source=eq.${source}&fetched_at=gte.${encodeURIComponent(since)}`,
+    config,
+  ); // the count, from countRows
 }
 
 const StatusRows = z.array(

@@ -100,7 +100,7 @@ export function scrapeStateQueries(
   return {
     lastAny: `raw_fetches?${sources}&${NEWEST_FIRST}`,
     lastUrl: `raw_fetches?${sources}&url=eq.${encodeURIComponent(url)}&${NEWEST_FIRST}`,
-    today: `raw_fetches?${sources}&fetched_at=gte.${dayStart}`,
+    today: `raw_fetches?${sources}&fetched_at=gte.${encodeURIComponent(dayStart)}`,
   };
 }
 
@@ -152,7 +152,7 @@ export function triedOutcome(row: { status: number; error: string | null }): Tri
 /** The query for the scrape reads of one journey since a check was due, oldest first */
 export function triedQuery(journeyId: string, since: IsoUtc): string {
   const sources = `source=in.(${SCRAPE_SOURCES.join(',')})`;
-  return `raw_fetches?journey_id=eq.${journeyId}&${sources}&fetched_at=gte.${since}&select=source,status,error,fetched_at&order=fetched_at.asc,id.asc`;
+  return `raw_fetches?journey_id=eq.${journeyId}&${sources}&fetched_at=gte.${encodeURIComponent(since)}&select=source,status,error,fetched_at&order=fetched_at.asc,id.asc`;
 }
 
 /** The scrape sources a journey's check has already read since it was due, with how each went */
